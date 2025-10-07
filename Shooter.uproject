@@ -9,7 +9,9 @@
 			"Type": "Runtime",
 			"LoadingPhase": "Default",
 			"AdditionalDependencies": [
-				"SKGShooterFrameworkActors"
+				"SKGShooterFrameworkActors",
+				"Engine",
+				"GameplayAbilities"
 			]
 		}
 	],
@@ -24,6 +26,10 @@
 			"SupportedTargetPlatforms": [
 				"Win64"
 			]
+		},
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
 		}
 	]
 }

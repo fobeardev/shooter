@@ -240,3 +240,171 @@ void AShooterFirearm::Server_LaunchProjectile_Implementation(const FSKGMuzzleTra
 	// Server authoritative spawn path mirrors the BP hook.
 	LaunchProjectile(LaunchTransform, false);
 }
+
+#pragma region Fire Mode
+
+// BP: CycleFireMode (Interface event) — client calls into Server to commit on authority
+void AShooterFirearm::CycleFireMode()
+{
+	// Same pattern as other input → server paths
+	Server_CycleFireMode();
+
+	// It’s harmless to also do it on the authority path (PIE single player, listen-server owner)
+	if (HasAuthority())
+	{
+		CurrentFireMode = GetNextFireMode();
+	}
+}
+
+void AShooterFirearm::Server_CycleFireMode_Implementation()
+{
+	// Server authoritative write mirrors the BP node chain:
+	//   Event CycleFireMode → Server_CycleFireMode → Set CurrentFireMode(GetNextFireMode())
+	CurrentFireMode = GetNextFireMode();
+}
+
+FGameplayTag AShooterFirearm::GetNextFireMode() const
+{
+	// BP: GetNextFireMode — pick the next tag in FireModes; wrap around; fall back to first
+	if (FireModes.Num() == 0)
+	{
+		return CurrentFireMode; // nothing to do
+	}
+
+	// Linear view of the container (order = insertion order)
+	const TArray<FGameplayTag>& Modes = FireModes.GetGameplayTagArray();
+
+	// Find current index (if not present, treat as "before first")
+	int32 Index = Modes.IndexOfByKey(CurrentFireMode);
+	if (Index == INDEX_NONE)
+	{
+		return Modes[0];
+	}
+
+	const int32 NextIndex = (Index + 1) % Modes.Num();
+	return Modes[NextIndex];
+}
+
+#pragma endregion
+
+#pragma region Reloading
+// --- Reloading ---
+
+void AShooterFirearm::Reload()
+{
+	// BP: Event Reload -> Branch( CanPerformAction ) -> (true) ReleaseTrigger -> PerformReloadAnimations -> Server_Reload
+
+	// Early out if action is blocked (owner missing, already reloading, etc.)
+	if (!CanPerformAction())
+	{
+		return;
+	}
+
+	// Mirror the BP: release first so autofire timers stop cleanly
+	ReleaseTrigger();
+
+	// Kick local feedback (animations, sounds, etc.)
+	PerformReloadAnimations();
+
+	// Tell the server we tried to reload (safe to call from server as well)
+	Server_Reload();
+}
+
+void AShooterFirearm::Server_Reload_Implementation()
+{
+	// BP: Server_Reload
+	// Spam guard the same way the BP increments a byte and compares
+	// (their graph checks (ReloadCounter + 1) > 250). We’ll mimic that:
+	const uint8 Next = static_cast<uint8>(ReloadCounter + 1);
+	if (Next > 250)
+	{
+		ReloadCounter = 0; // wrap / reset like the BP’s false path
+	}
+	else
+	{
+		ReloadCounter = Next; // true path: set incremented value
+	}
+
+	// Server side: mark state; actual montages usually don’t run on dedicated server
+	bIsReloading = true;
+
+	// If you want server-authoritative reload logic (ammo refill etc.), do it here.
+	// (Animations are purely cosmetic — keep them on owning client.)
+}
+
+void AShooterFirearm::PerformReloadAnimations()
+{
+	// BP: PerformReloadAnimations -> GetReloadAnimations -> Branch(bValid)
+	//  true: bIsReloading = true -> PlayMontage(PlayerMesh, PlayerMontage) -> PlayMontage(FirearmMesh, FirearmMontage)
+	//  (then) OnBlendOut sets bIsReloading = false
+
+	UAnimMontage* PlayerMontage = nullptr;
+	UAnimMontage* FirearmMontage = nullptr;
+	bool bValid = false;
+	GetReloadAnimations(/*out*/ FirearmMontage, /*out*/ PlayerMontage, /*out*/ bValid);
+
+	if (!bValid)
+	{
+		return;
+	}
+
+	bIsReloading = true;
+
+	// Player montage
+	if (CurrentShooterPawnComponent)
+	{
+		if (USkeletalMeshComponent* PawnMesh = CurrentShooterPawnComponent->GetPawnMesh())
+		{
+			if (UAnimInstance* Anim = PawnMesh->GetAnimInstance())
+			{
+				constexpr float PlayRate = 1.f;
+				Anim->Montage_Play(PlayerMontage, PlayRate);
+				// Bind to blend-out so we can clear the flag like the BP “On Blend Out”
+				FOnMontageBlendingOutStarted BlendOut;
+				BlendOut.BindUFunction(this, FName("OnReloadMontageBlendOut"));
+				Anim->Montage_SetBlendingOutDelegate(BlendOut, PlayerMontage);
+			}
+		}
+	}
+
+	// Firearm montage (weapon skeletal mesh)
+	if (FirearmMeshComponent && FirearmMeshComponent->GetAnimInstance())
+	{
+		UAnimInstance* Anim = FirearmMeshComponent->GetAnimInstance();
+		constexpr float PlayRate = 1.f;
+		Anim->Montage_Play(FirearmMontage, PlayRate);
+
+		FOnMontageBlendingOutStarted BlendOut;
+		BlendOut.BindUFunction(this, FName("OnReloadMontageBlendOut"));
+		Anim->Montage_SetBlendingOutDelegate(BlendOut, FirearmMontage);
+	}
+}
+
+void AShooterFirearm::OnReloadMontageBlendOut(UAnimMontage* /*Montage*/, bool /*bInterrupted*/)
+{
+	// BP: bIsReloading = false on BlendOut path
+	bIsReloading = false;
+}
+
+void AShooterFirearm::GetReloadAnimations(UAnimMontage*& OutFirearm, UAnimMontage*& OutPlayer, bool& bValid) const
+{
+	OutFirearm = nullptr;
+	OutPlayer = nullptr;
+	bValid = false;
+
+	// In the BP this comes from a data asset accessor "GetReloadAnimations".
+	// Do the same here: pull from your PDA/DT or cached pointers if you have them.
+	//
+	// Example if you have a PDA with two fields:
+	// if (const UShooterPDAFirearm* PDA = Cast<UShooterPDAFirearm>(DAConstruction))
+	// {
+	//     OutPlayer  = PDA->Animation_Player_Reload;
+	//     OutFirearm = PDA->Animation_Firearm_Reload;
+	// }
+
+	// If you don’t have data yet, leave them null and bValid=false.
+	// Flip this to true once both references are non-null.
+	bValid = (OutPlayer != nullptr) || (OutFirearm != nullptr);
+}
+
+#pragma endregion

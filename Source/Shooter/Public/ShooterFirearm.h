@@ -148,4 +148,41 @@ protected:
     void Server_LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform);
 
 #pragma endregion
+
+    // -------------------- Fire Mode (BP parity) --------------------
+
+	// BP: CycleFireMode (Interface override path)
+    UFUNCTION(BlueprintCallable, Category = "Fire Mode")
+    void CycleFireMode();
+
+    // Server RPC that does the authoritative write
+    UFUNCTION(Server, Reliable)
+    void Server_CycleFireMode();
+
+    // BP: GetNextFireMode (Pure)
+    UFUNCTION(BlueprintPure, Category = "Fire Mode")
+    FGameplayTag GetNextFireMode() const;
+
+    // --- Reloading ---
+
+// Client entry (from BPI_Firearm: Reload)
+    UFUNCTION(BlueprintCallable, Category = "Shooting")
+    void Reload();
+
+    // Server authoritative gate
+    UFUNCTION(Server, Reliable)
+    void Server_Reload();
+
+    // Plays the two reloading montages (player + firearm)
+    UFUNCTION(BlueprintCallable, Category = "Shooting")
+    void PerformReloadAnimations();
+
+    // BP node replacement that finds the two montages to play
+    UFUNCTION(BlueprintPure, Category = "Shooting")
+    void GetReloadAnimations(/*out*/ UAnimMontage*& Firearm, /*out*/ UAnimMontage*& Player, /*out*/ bool& bValid) const;
+
+    // Optional: called when a reload montage blends out to unset state
+    UFUNCTION()
+    void OnReloadMontageBlendOut(UAnimMontage* Montage, bool bInterrupted);
+
 };
