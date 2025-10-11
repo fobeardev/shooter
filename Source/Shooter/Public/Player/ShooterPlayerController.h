@@ -21,10 +21,34 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     TObjectPtr<UInputMappingContext> IMC_Default;
 
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    TObjectPtr<UInputAction> IA_Move;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    TObjectPtr<UInputAction> IA_Jump;
+
+    /** Digital action bound to Mouse X / Y in the IMC */
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    TObjectPtr<UInputAction> IA_Look;
+
     /** Digital action bound to Left Alt in the IMC */
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     TObjectPtr<UInputAction> IA_Dash;
 
+
 private:
-    void OnDashPressed();   // calls Character->Input_Dash()
+    UFUNCTION()
+    void OnDashPressed();
+
+    UFUNCTION()
+    void OnLook(const FInputActionValue& Value);
+
+    UFUNCTION()
+    void OnMove(const FInputActionValue& Value);
+
+    UFUNCTION() 
+    void OnJumpStarted();
+
+    UFUNCTION()
+    void OnJumpCanceled();
 };
