@@ -43,6 +43,32 @@ void AShooterFirearm::BeginPlay()
 	}
 }
 
+void AShooterFirearm::Tick(float DeltaTime)
+{
+
+	// --- Debug: Print out CurrentProceduralAnimComponent state ---
+	if (FirearmComponent)
+	{
+		USKGProceduralAnimComponent* Proc = FirearmComponent->GetCurrentProceduralAnimComponent();
+		if (Proc)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ShooterFirearm: CurrentProceduralAnimComponent = %s (Owner: %s, Class: %s)"),
+				*Proc->GetName(),
+				*Proc->GetOwner()->GetName(),
+				*Proc->GetClass()->GetName());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("ShooterFirearm: CurrentProceduralAnimComponent is NULL!"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("ShooterFirearm: FirearmComponent is NULL!"));
+	}
+}
+
+
 void AShooterFirearm::OnDAConstructionBundlesLoaded()
 {
 	// BP: Cast DAConstruction -> PDA_Firearm and use FireRate/FireModes/AnimBP

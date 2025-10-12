@@ -74,6 +74,7 @@ public:
 
     // ---------- Blueprint → C++ events ----------
     virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 
     // From BP interface events:
     UFUNCTION(BlueprintCallable) void SetOwningPawn(APawn* OwningPawn);

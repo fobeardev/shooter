@@ -6,15 +6,17 @@
 #include "InputActionValue.h"
 #include "Characters/ShooterCharacter.h"
 
-AShooterPlayerController::AShooterPlayerController() {}
+AShooterPlayerController::AShooterPlayerController() 
+{
+    bShowMouseCursor = false;
+}
 
 void AShooterPlayerController::BeginPlay()
 {
     Super::BeginPlay();
 
-    SetShowMouseCursor(false);
-
-    FInputModeGameOnly Mode; 
+    // Game-only input mode for typical shooter controls
+    FInputModeGameOnly Mode;
     SetInputMode(Mode);
 
     if (ULocalPlayer* LP = GetLocalPlayer())
@@ -29,34 +31,52 @@ void AShooterPlayerController::BeginPlay()
     }
 }
 
+// --------------------------------
+// SetupInputComponent: bind Enhanced Input actions
+// --------------------------------
 void AShooterPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
 
     if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InputComponent))
     {
+        // --- Movement ---
         if (IA_Move)
         {
             EIC->BindAction(IA_Move, ETriggerEvent::Triggered, this, &AShooterPlayerController::OnMove);
         }
 
+        // --- Look ---
         if (IA_Look)
         {
             EIC->BindAction(IA_Look, ETriggerEvent::Triggered, this, &AShooterPlayerController::OnLook);
         }
 
+        // --- Jump ---
         if (IA_Jump)
         {
             EIC->BindAction(IA_Jump, ETriggerEvent::Started, this, &AShooterPlayerController::OnJumpStarted);
             EIC->BindAction(IA_Jump, ETriggerEvent::Canceled, this, &AShooterPlayerController::OnJumpCanceled);
         }
 
+        // --- Dash ---
         if (IA_Dash)
         {
             EIC->BindAction(IA_Dash, ETriggerEvent::Started, this, &AShooterPlayerController::OnDashPressed);
         }
+
+        // --- Aim (RMB / ADS) ---
+        if (IA_Aim)
+        {
+            EIC->BindAction(IA_Aim, ETriggerEvent::Started, this, &AShooterPlayerController::OnAim);
+            EIC->BindAction(IA_Aim, ETriggerEvent::Completed, this, &AShooterPlayerController::OnAim);
+        }
     }
 }
+
+// --------------------------------
+// Input Handlers (delegate to ShooterCharacter)
+// --------------------------------
 
 void AShooterPlayerController::OnMove(const FInputActionValue& Value)
 {
@@ -97,5 +117,14 @@ void AShooterPlayerController::OnDashPressed()
     if (AShooterCharacter* C = Cast<AShooterCharacter>(GetPawn()))
     {
         C->Input_Dash();
+    }
+}
+
+void AShooterPlayerController::OnAim(const FInputActionValue& Value)
+{
+    if (AShooterCharacter* C = Cast<AShooterCharacter>(GetPawn()))
+    {
+        // Forward to character's SKG-integrated aim function
+        C->Input_Aim(Value);
     }
 }

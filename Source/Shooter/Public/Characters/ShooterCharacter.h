@@ -4,7 +4,6 @@
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
 #include "GameplayTagContainer.h"
-#include <Components/SKGShooterPawnComponent.h>
 #include "ShooterCharacter.generated.h"
 
 class UAbilitySystemComponent;
@@ -13,6 +12,7 @@ class UGameplayEffect;
 class UAttrSet_Combat;
 class UCameraComponent;
 class USpringArmComponent;
+class USKGShooterPawnComponent;
 
 UCLASS()
 class SHOOTER_API AShooterCharacter : public ACharacter, public IAbilitySystemInterface
@@ -32,11 +32,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Shooter|Camera")
 	bool IsUsingThirdPersonCamera() const { return bUseThirdPersonCamera; }
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Input") void Input_Look(const FVector2D& LookAxis);
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Input") void Input_Move(const FVector2D& MoveAxis);
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Input") void Input_Dash();
-	UFUNCTION(BlueprintCallable, Category = "Shooter|GAS")   bool IsInIFrame() const;
+	UFUNCTION(BlueprintCallable, Category = "Shooter|Input")
+	void Input_Look(const FVector2D& LookAxis);
+	UFUNCTION(BlueprintCallable, Category = "Shooter|Input")
+	void Input_Move(const FVector2D& MoveAxis);
+	UFUNCTION(BlueprintCallable, Category = "Shooter|Input")
+	void Input_Dash();
+	UFUNCTION(BlueprintCallable, Category = "Shooter|Input")
+	void Input_Aim(const FInputActionValue& Value);
+	UFUNCTION(BlueprintCallable, Category = "Shooter|GAS")  
+	bool IsInIFrame() const;
 
+	// Spawn default firearm (call on server or it will route to server)
+	UFUNCTION(BlueprintCallable, Category = "Shooter|Firearm")
+	void SpawnDefaultFirearm();
 protected:
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
@@ -64,6 +73,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|SKG", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USKGShooterPawnComponent> SKGShooterPawn;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Tags")
+	FGameplayTag Tag_State_Aiming;
 
 	// --- Cameras ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")
@@ -149,6 +161,25 @@ protected:
 	// Prevent duplicate ability grants
 	UPROPERTY(VisibleInstanceOnly, Category = "Shooter|Abilities")
 	bool bStartupAbilitiesGiven = false;
+
+	// Class to spawn
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
+	TSubclassOf<AActor> DefaultFirearmClass;
+
+	// Socket to attach to (matches your BP: ik_hand_gun)
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
+	FName FirearmAttachSocket = TEXT("ik_hand_gun");
+
+	// Keep a reference locally if you want (not required for replication)
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> SpawnedFirearm;
+
+	// Server RPC that performs the spawn/attach and SetHeldActor
+	UFUNCTION(Server, Reliable)
+	void Server_SpawnDefaultFirearm();
+
+	// Internal implementation used by server only
+	void SpawnDefaultFirearm_Internal();
 
 public:
 	// --- Dash charge API ---

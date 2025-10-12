@@ -10,10 +10,13 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include <Components/SKGShooterPawnComponent.h>
+#include "InputActionValue.h"
 #include "TimerManager.h"
 
 // Project
 #include "Abilities/AttrSet_Combat.h"
+#include "Tags/ShooterGameplayTags.h"
 
 AShooterCharacter::AShooterCharacter()
 {
@@ -45,7 +48,7 @@ AShooterCharacter::AShooterCharacter()
 	// Third person boom
 	ThirdPersonBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonBoom"));
 	ThirdPersonBoom->SetupAttachment(RootComponent);
-	ThirdPersonBoom->TargetArmLength = ThirdPersonTargetArm;      // 300
+	ThirdPersonBoom->TargetArmLength = ThirdPersonTargetArm;       // 300
 	ThirdPersonBoom->SetRelativeLocation(ThirdPersonBoomOffset);   // (0,50,70)
 	ThirdPersonBoom->bUsePawnControlRotation = true;
 	ThirdPersonBoom->bEnableCameraLag = bThirdPersonLag;           // true
@@ -95,8 +98,9 @@ AShooterCharacter::AShooterCharacter()
 		bUseControllerRotationRoll = false;
 	}
 
-	Tag_Ability_Dash = FGameplayTag::RequestGameplayTag(FName("Ability.Movement.Dash"));
-	Tag_State_IFrame = FGameplayTag::RequestGameplayTag(FName("State.IFrame"));
+	Tag_Ability_Dash = ShooterTags::Ability_Movement_Dash;
+	Tag_State_IFrame = ShooterTags::State_IFrame;
+	Tag_State_Aiming = ShooterTags::State_ADS;
 
 	// Charges defaults
 	MaxDashCharges = 2;
@@ -131,6 +135,12 @@ void AShooterCharacter::OnRep_DashCharges()
 void AShooterCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Auto-equip on server at start if a class is set
+	if (HasAuthority() && DefaultFirearmClass)
+	{
+		SpawnDefaultFirearm_Internal();
+	}
 
 	// Ensure FP camera snaps to the head socket at runtime even if mesh changes
 	if (FirstPersonCamera && GetMesh())
@@ -215,6 +225,46 @@ void AShooterCharacter::Input_Dash()
 	else
 	{
 		ServerTryActivateDash();
+	}
+}
+
+// ------------------------------------------------------------
+// Input_Aim (Enhanced Input call via ShooterPlayerController)
+// ------------------------------------------------------------
+void AShooterCharacter::Input_Aim(const FInputActionValue& Value)
+{
+	const bool bPressed = Value.Get<bool>();
+
+	if (!SKGShooterPawn)
+		return;
+
+	UE_LOG(LogTemp, Warning, TEXT("AIM INPUT: HeldActor=%s, FirearmComp=%s, ProceduralComp=%s"),
+		*GetNameSafe(SKGShooterPawn->GetHeldActor()),
+		*GetNameSafe(SKGShooterPawn->GetCurrentFirearmComponent()),
+		*GetNameSafe(SKGShooterPawn->GetCurrentProceduralAnimComponent()));
+
+	if (bPressed)
+	{
+		SKGShooterPawn->StartAiming();
+	}
+	else
+	{
+		SKGShooterPawn->StopAiming();
+	}
+
+	if (ASC && Tag_State_Aiming.IsValid())
+	{
+		if (bPressed)
+		{
+			ASC->AddLooseGameplayTag(Tag_State_Aiming);
+		}
+		else 
+		{
+			ASC->RemoveLooseGameplayTag(Tag_State_Aiming);
+		}
+
+		bool bHasTag = ASC->HasMatchingGameplayTag(ShooterTags::State_ADS);
+		UE_LOG(LogTemp, Warning, TEXT("Aiming Tag Active: %d"), bHasTag);
 	}
 }
 
@@ -455,5 +505,63 @@ void AShooterCharacter::UpdateControllerPitchClamp()
 	{
 		PC->PlayerCameraManager->ViewPitchMin = MinPitch;
 		PC->PlayerCameraManager->ViewPitchMax = MaxPitch;
+	}
+}
+
+void AShooterCharacter::SpawnDefaultFirearm()
+{
+	// Mirror your BP: if not authority, route to server; otherwise do it now
+	if (!HasAuthority())
+	{
+		Server_SpawnDefaultFirearm();
+		return;
+	}
+	SpawnDefaultFirearm_Internal();
+}
+
+void AShooterCharacter::Server_SpawnDefaultFirearm_Implementation()
+{
+	SpawnDefaultFirearm_Internal();
+}
+
+void AShooterCharacter::SpawnDefaultFirearm_Internal()
+{
+	if (!DefaultFirearmClass || !GetMesh())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// Spawn params like the BP graph: owner = self, instigator = controller pawn
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	Params.Instigator = GetInstigator();
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	// We do not care about the initial transform since we snap to socket
+	const FTransform SpawnTM = FTransform::Identity;
+
+	AActor* NewFirearm = World->SpawnActor<AActor>(DefaultFirearmClass, SpawnTM, Params);
+	if (!NewFirearm)
+	{
+		return;
+	}
+
+	// Attach to character mesh at socket, snap all, weld simulated bodies like the BP node
+	const FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, true);
+	NewFirearm->AttachToComponent(GetMesh(), AttachRules, FirearmAttachSocket);
+
+	// Keep optional local pointer
+	SpawnedFirearm = NewFirearm;
+
+	// Inform SKG component so procedurals/aiming can initialize and replicate to clients
+	if (SKGShooterPawn)
+	{
+		SKGShooterPawn->SetHeldActor(NewFirearm);
 	}
 }
