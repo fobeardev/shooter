@@ -6,7 +6,7 @@
 #include "InputActionValue.h"
 #include "Characters/ShooterCharacter.h"
 
-AShooterPlayerController::AShooterPlayerController() 
+AShooterPlayerController::AShooterPlayerController()
 {
     bShowMouseCursor = false;
 }
@@ -71,6 +71,13 @@ void AShooterPlayerController::SetupInputComponent()
             EIC->BindAction(IA_Aim, ETriggerEvent::Started, this, &AShooterPlayerController::OnAim);
             EIC->BindAction(IA_Aim, ETriggerEvent::Completed, this, &AShooterPlayerController::OnAim);
         }
+
+        // --- Fire (LMB) ---
+        if (IA_Fire)
+        {
+            EIC->BindAction(IA_Fire, ETriggerEvent::Started, this, &AShooterPlayerController::OnFire);
+            EIC->BindAction(IA_Fire, ETriggerEvent::Completed, this, &AShooterPlayerController::OnFire);
+        }
     }
 }
 
@@ -126,5 +133,22 @@ void AShooterPlayerController::OnAim(const FInputActionValue& Value)
     {
         // Forward to character's SKG-integrated aim function
         C->Input_Aim(Value);
+    }
+}
+
+void AShooterPlayerController::OnFire(const FInputActionValue& Value)
+{
+    if (AShooterCharacter* C = Cast<AShooterCharacter>(GetPawn()))
+    {
+        const bool bPressed = Value.Get<bool>();
+
+        if (bPressed)
+        {
+            C->Input_FirePressed();
+        }
+        else
+        {
+            C->Input_FireReleased();
+        }
     }
 }

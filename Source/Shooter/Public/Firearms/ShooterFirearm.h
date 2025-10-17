@@ -1,51 +1,108 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
+#include "Weapons/ShooterWeaponBase.h"
 #include "ShooterFirearm.generated.h"
 
-// Forward declarations of SKG components
+// SKG forward decls
 class USKGFirearmComponent;
 class USKGAttachmentManagerComponent;
 class USKGProceduralAnimComponent;
 class USKGOffhandIKComponent;
 class USKGMuzzleComponent;
-class USkeletalMeshComponent;
+struct FSKGMuzzleTransform;
 
+/**
+ * Firearm implementation using SKG’s modular components.
+ * - No dependency on ASKGFirearm (BP convenience class)
+ * - Keeps your original component layout & BeginPlay init order
+ * - Implements firing via SKG component API (ShotPerformed + Muzzle)
+ */
 UCLASS()
-class SHOOTER_API AShooterFirearm : public AActor
+class SHOOTER_API AShooterFirearm : public AShooterWeaponBase
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    AShooterFirearm();
+	AShooterFirearm();
+
+	// === Ability/Input entry points ===
+	virtual void Fire() override;
+
+	virtual void Server_Fire_Implementation() override;
+
+	virtual void StopFire() override;
+
+	// WeaponBase contracts
+	virtual USkeletalMeshComponent* GetWeaponMesh() const override;
+	virtual bool CanPerformAction() const override;
 
 protected:
-    virtual void BeginPlay() override;
+	// --- AActor
+	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	// ------------------------------
+	// SKG Components (keep these exact)
+	// ------------------------------
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+	TObjectPtr<USkeletalMeshComponent> FirearmMeshComponent;
 
-    // ------------------------------
-    // Components
-    // ------------------------------
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Firearm")
-    TObjectPtr<USkeletalMeshComponent> FirearmMeshComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+	TObjectPtr<USKGFirearmComponent> FirearmComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Firearm")
-    TObjectPtr<USKGFirearmComponent> FirearmComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+	TObjectPtr<USKGAttachmentManagerComponent> AttachmentManagerComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Firearm")
-    TObjectPtr<USKGAttachmentManagerComponent> AttachmentManagerComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+	TObjectPtr<USKGProceduralAnimComponent> ProceduralAnimComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Firearm")
-    TObjectPtr<USKGProceduralAnimComponent> ProceduralAnimComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+	TObjectPtr<USKGMuzzleComponent> MuzzleComponent;
 
-    //UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Firearm")
-    //TObjectPtr<USKGMuzzleComponent> MuzzleComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+	TObjectPtr<USKGOffhandIKComponent> OffhandIKComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Firearm")
-    TObjectPtr<USKGOffhandIKComponent> OffhandIKComponent;
+protected:
+	// ------------------------------
+	// Firing Logic
+	// ------------------------------
+	virtual void HandleFire_Internal() override;
+	virtual void HandleStopFire_Internal() override;
 
-private:
+	void BeginAutoIfNeeded();     // set timer if Auto/Burst
+	void ClearFireTimers();
 
-    void LogComponentInitialization() const;
+	// Cosmetic hooks (Blueprint can implement)
+	UFUNCTION(BlueprintImplementableEvent, Category = "Shooter|FX")
+	void PlayFireEffects();
+
+	virtual void LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform, bool bIsLocalFire);
+
+	// Server authoritative spawn entry (if you want a pure C++ path)
+	UFUNCTION(Server, Reliable)
+	void Server_LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform);
+
+protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Firearm|Projectile")
+	TSubclassOf<AActor> ProjectileClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Firearm|Projectile")
+	float ProjectileVelocity = 30000.0f; // cm/s, about 300 m/s
+
+	// Timers for Auto/Burst
+	FTimerHandle AutoTimerHandle;
+
+	// Optional: local “input edge” counters if you want parity with _Old
+	int32 PressCount = 0;
+	int32 ReleaseCount = 0;
+
+	// Rate-of-fire fallback (if no data asset yet)
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
+	float FireRateSeconds = 0.12f;
+
+	// Burst tracking
+	int32 PendingBurstShots = 0;
+	int32 BurstSize = 3;  // you can drive this from data later
 };

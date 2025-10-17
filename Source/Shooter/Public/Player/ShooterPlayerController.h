@@ -16,7 +16,7 @@ class UInputAction;
  *
  * Responsibilities:
  *  - Registers the default input mapping context.
- *  - Binds input actions (Move, Look, Jump, Dash, Aim).
+ *  - Binds input actions (Move, Look, Jump, Dash, Aim, Fire).
  *  - Forwards input events to AShooterCharacter.
  *
  * This keeps the character class free of direct Enhanced Input logic,
@@ -67,6 +67,10 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     TObjectPtr<UInputAction> IA_Aim;
 
+    /** Left Mouse Button (Fire Weapon) */
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    TObjectPtr<UInputAction> IA_Fire;
+
 private:
     // ---------------------------------------------------------------------------
     // Input Event Handlers
@@ -95,4 +99,8 @@ private:
     /** Aim pressed/released (Boolean). */
     UFUNCTION()
     void OnAim(const FInputActionValue& Value);
+
+    /** Fire pressed/released (Boolean). */
+    UFUNCTION()
+    void OnFire(const FInputActionValue& Value);
 };
