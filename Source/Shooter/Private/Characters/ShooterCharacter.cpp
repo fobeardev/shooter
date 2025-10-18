@@ -595,3 +595,26 @@ void AShooterCharacter::SpawnDefaultFirearm_Internal()
 		}
 	}
 }
+
+void AShooterCharacter::Debug_ApplySelfDamage()
+{
+	if (!ASC)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Debug_ApplySelfDamage: No ASC"));
+		return;
+	}
+
+	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+	Context.AddSourceObject(this);
+
+	// Create a damage spec using your standard damage effect
+	FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(UGameplayEffect::StaticClass(), 1.0f, Context);
+	if (SpecHandle.IsValid() && SpecHandle.Data.IsValid())
+	{
+		// Apply a lethal amount through SetByCaller
+		SpecHandle.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag("Data.Weapon.DamageScalar"), 99999.0f);
+		ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+
+		UE_LOG(LogTemp, Warning, TEXT("Debug_ApplySelfDamage: Applied lethal self-damage via GAS"));
+	}
+}

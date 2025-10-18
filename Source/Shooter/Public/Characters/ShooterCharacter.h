@@ -66,8 +66,6 @@ public:
 
 	bool ConsumeDashCharge();
 	void EnsureDashRechargeRunning();
-
-	// Client-only visual refund if Commit fails
 	void AddDashChargeLocal(int32 Delta)
 	{
 		CurrentDashCharges = FMath::Clamp(CurrentDashCharges + Delta, 0, MaxDashCharges);
@@ -75,6 +73,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Shooter|GAS")
 	bool IsInIFrame() const;
+
+	/** Debug: Apply self-damage via GAS for testing death/respawn */
+	UFUNCTION(BlueprintCallable, Category = "Shooter|Debug")
+	void Debug_ApplySelfDamage();
 
 protected:
 	virtual void BeginPlay() override;
@@ -203,7 +205,6 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSetUseThirdPersonCamera(bool bEnable);
 
-	// Dash RPC
 	UFUNCTION(Server, Reliable)
 	void ServerTryActivateDash();
 
