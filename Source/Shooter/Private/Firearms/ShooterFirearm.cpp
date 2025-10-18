@@ -9,11 +9,13 @@
 #include "Components/SKGShooterPawnComponent.h"
 
 // TB
-#include <Subsystems/TerminalBallisticsSubsystem.h>
-#include <Core/TBStatics.h>
-#include <Types/TBLaunchTypes.h>
-#include <Types/TBProjectile.h>
-#include <Types/TBEnums.h>
+#include "Subsystems/TerminalBallisticsSubsystem.h"
+#include "Core/TBBulletDataAsset.h"
+#include "Core/TBStatics.h"
+#include "Types/TBLaunchTypes.h"
+#include "Types/TBProjectileId.h"
+#include "Types/TBProjectileFlightData.h"
+#include "Types/TBImpactParams.h"
 
 // UE
 #include "Components/SkeletalMeshComponent.h"
@@ -21,10 +23,15 @@
 #include "Net/UnrealNetwork.h"
 
 // Abilities
+#include "AbilitySystemGlobals.h"
+#include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "GameplayEffect.h"
+#include "GameplayEffectTypes.h"
 
 // Tags
 #include "Tags/ShooterGameplayTags.h"
+#include <AbilitySystemGlobals.h>
 
 AShooterFirearm::AShooterFirearm()
 {
@@ -154,7 +161,7 @@ void AShooterFirearm::HandleFire_Internal()
 	// SKG bookkeeping (heat, etc.)
 	FirearmComponent->ShotPerformed();
 
-	// Cosmetic local feedback (FX + procedural recoil; Blueprint can wire recoil via ShooterPawnComp)
+	// Cosmetic local feedback
 	PlayFireEffects();
 
 	// (Optional) If you have a ShooterPawnComp cached, you can call:
@@ -224,53 +231,76 @@ void AShooterFirearm::LaunchProjectile(const FSKGMuzzleTransform& LaunchTransfor
 	if (!GetWorld())
 		return;
 
-	const FTransform RealXform = LaunchTransform.ConvertToTransform();
-	const FVector FireLoc = RealXform.GetLocation();
-	const FVector FireDir = RealXform.GetRotation().GetForwardVector();
+	const FTransform Xf = LaunchTransform.ConvertToTransform();
+	const FVector FireLoc = Xf.GetLocation();
+	const FVector FireDir = Xf.GetRotation().GetForwardVector();
 
+	// Build Launch Params (note: Owner is set inside helper; required by TB statics)
 	FTBLaunchParams LaunchParams = UTerminalBallisticsStatics::MakeLaunchParamsWithDirectionVector(
-		900.0,                 // ProjectileSpeed
-		5000.0,                // EffectiveRange
-		1.0,                   // Timescale
-		FireLoc,               // Location
-		FireDir,               // Direction
-		{ this },              // ToIgnore
-		UTerminalBallisticsStatics::GetDefaultObjectTypes(),
-		ECC_GameTraceChannel10,// Trace channel
-		true,                  // bIgnoreOwner
-		true,                  // bAddToOwnerVelocity
-		false,                 // bForceNoTracer
-		this,                  // Owner
-		GetInstigatorController(),
-		1.0,                   // GravityMultiplier
-		10.0,                  // OwnerIgnoreDistance
-		25.0,                  // TracerActivationDistance
-		nullptr                // Payload
+		/*ProjectileSpeed m/s*/        900.0,
+		/*EffectiveRange m*/           5000.0,
+		/*Timescale*/                  1.0,
+		/*Location*/                   FireLoc,
+		/*Direction*/                  FireDir,
+		/*ActorsToIgnore*/{ this },
+		/*ObjTypes*/                   UTerminalBallisticsStatics::GetDefaultObjectTypes(),
+		/*TraceChannel*/               ECC_GameTraceChannel10,
+		/*bIgnoreOwner*/               true,
+		/*bAddToOwnerVelocity*/        true,
+		/*bForceNoTracer*/             false,
+		/*Owner*/                      this,
+		/*InstigatorController*/       GetInstigatorController(),
+		/*GravityMultiplier*/          1.0,
+		/*OwnerIgnoreDistance*/        10.0,
+		/*TracerActivationDistance*/   25.0,
+		/*Payload*/                    nullptr
 	);
 
-	// --- Simplified projectile & physics setup
-	FTBProjectile Projectile;
-	Projectile.Mass = 0.02;   // kg
-	Projectile.Radius = 0.005;  // m
+	UBulletDataAsset* Bullet = nullptr;
 
-	FPhysMatProperties PhysProps;
-	PhysProps.Density = 7850.0; // kg/m^3
-	PhysProps.UltimateTensileStrength = 210.0;  // MPa (example)
+	if (BulletDataAsset.IsValid())
+	{
+		Bullet = BulletDataAsset.Get();
+	}
+	else if (BulletDataAsset.ToSoftObjectPath().IsValid())
+	{
+		Bullet = BulletDataAsset.LoadSynchronous();
+	}
+
+	if (!Bullet)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ShooterFirearm] No BulletDataAsset set on %s"), *GetNameSafe(this));
+		return;
+	}
 
 	const int32 DebugFlags =
 		(int32)ETBBallisticsDebugType::DrawDebugTrace |
 		(int32)ETBBallisticsDebugType::PrintDebugInfo;
 
-	FTBProjectileId FiredId =
-		UTerminalBallisticsStatics::AddAndFireProjectile(
-			Projectile,
-			PhysProps,
-			LaunchParams,
-			FTBProjectileId::None,
-			DebugFlags
-		);
+	// Dynamic delegates (Blueprint-style) — bind to UFUNCTIONs on this object
+	FBPOnBulletHit OnHitBP;
+	OnHitBP.BindUFunction(this, FName("OnBulletHit_TB"));
 
-	UE_LOG(LogTemp, Log, TEXT("Server fired projectile with debug trace."));
+	FBPOnProjectileUpdate OnUpdateBP;
+	OnUpdateBP.BindUFunction(this, FName("OnBulletUpdate_TB"));
+
+	// Empty delegates we don't currently need
+	FBPOnProjectileComplete OnCompleteBP;
+	FBPOnBulletExitHit OnExitHitBP;
+	FBPOnBulletInjure OnInjureBP;
+
+	// Fire the bullet
+	UTerminalBallisticsStatics::AddAndFireBulletWithCallbacksAndUpdate(
+		Bullet,
+		LaunchParams,
+		OnCompleteBP,
+		OnHitBP,
+		OnExitHitBP,
+		OnInjureBP,
+		OnUpdateBP,
+		FTBProjectileId::None,
+		DebugFlags
+	);
 }
 
 // ===== Projectile spawn server path =====
@@ -279,4 +309,75 @@ void AShooterFirearm::Server_LaunchProjectile_Implementation(const FSKGMuzzleTra
 {
 	// Only run on server — spawns the authoritative projectile
 	LaunchProjectile(LaunchTransform, /*bIsLocalFire=*/false);
+}
+
+// --- TB delegate: OnHit (apply GAS damage) ---
+void AShooterFirearm::OnBulletHit_TB(const FTBImpactParams& Impact)
+{
+	// Server-authoritative damage
+	if (!HasAuthority())
+		return;
+
+	AActor* HitActor = Impact.HitResult.GetActor();
+	if (!HitActor || HitActor == this)
+		return;
+
+	// Source ASC (weapon owner) -> Target ASC (hit actor)
+	UAbilitySystemComponent* SourceASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HitActor);
+	if (!SourceASC || !TargetASC)
+		return;
+	if (!SourceASC || !TargetASC)
+		return;
+
+	// --- Compute basic ballistic energy scalar ---
+	const float ImpactSpeed = Impact.ImpactVelocity.Size();
+	const float ImpactEnergy = ImpactSpeed * 0.1f; // Simple kinetic proxy
+
+	// You can later replace this with: 0.5f * Mass * V^2
+
+	//const float MassKg = 0.02f;               // example bullet mass (20 grams)
+	//const float VelocityMS = Impact.ImpactVelocity.Size() / 100.0f; // convert cm/s to m/s
+	//const float ImpactEnergy = 0.5f * MassKg * FMath::Square(VelocityMS);
+
+	// but it is overkill for now (literally)
+
+	// --- Load ballistic damage GE from soft reference ---
+	TSubclassOf<UGameplayEffect> DamageGE = DamageGameplayEffectClass.LoadSynchronous();
+	if (!DamageGE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TB] Missing DamageGameplayEffectClass on %s"), *GetName());
+		return;
+	}
+
+	// --- Prepare context and spec ---
+	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+	Context.AddInstigator(GetOwner(), this);
+
+	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageGE, 1.0f, Context);
+	if (!SpecHandle.IsValid())
+		return;
+
+	// --- Pass dynamic damage value ---
+	SpecHandle.Data->SetSetByCallerMagnitude(
+		FGameplayTag::RequestGameplayTag(TEXT("Data.Weapon.DamageScalar")),
+		-ImpactEnergy
+	);
+
+	// --- Apply damage ---
+	TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+
+	UE_LOG(LogTemp, Log, TEXT("[TB] Hit %s | Speed=%.1f | Energy=%.1f | Surface=%d"),
+		*GetNameSafe(HitActor),
+		ImpactSpeed,
+		ImpactEnergy,
+		(int32)Impact.SurfaceType);
+}
+
+// --- TB delegate: per-tick flight update (optional logging) ---
+void AShooterFirearm::OnBulletUpdate_TB(const FTBProjectileFlightData& Flight)
+{
+	UE_LOG(LogTemp, Verbose, TEXT("[TB] Bullet @ %s | Vel=%.1f"),
+		*Flight.Location.ToString(),
+		Flight.Velocity.Size());
 }

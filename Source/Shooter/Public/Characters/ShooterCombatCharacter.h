@@ -37,6 +37,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Shooter|Combat")
 	bool IsDead() const;
 
+	// Death logic
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	virtual void OnOutOfHealth();
+
 protected:
 	virtual void BeginPlay() override;
 

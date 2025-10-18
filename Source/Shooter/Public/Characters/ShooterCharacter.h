@@ -66,7 +66,12 @@ public:
 
 	bool ConsumeDashCharge();
 	void EnsureDashRechargeRunning();
-	void AddDashChargeLocal(int32 Delta);
+
+	// Client-only visual refund if Commit fails
+	void AddDashChargeLocal(int32 Delta)
+	{
+		CurrentDashCharges = FMath::Clamp(CurrentDashCharges + Delta, 0, MaxDashCharges);
+	}
 
 	UFUNCTION(BlueprintPure, Category = "Shooter|GAS")
 	bool IsInIFrame() const;
@@ -201,4 +206,6 @@ protected:
 	// Dash RPC
 	UFUNCTION(Server, Reliable)
 	void ServerTryActivateDash();
+
+	virtual void HandleDeath() override;
 };

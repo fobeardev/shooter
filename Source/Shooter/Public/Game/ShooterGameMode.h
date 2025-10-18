@@ -16,4 +16,10 @@ class SHOOTER_API AShooterGameMode : public AGameModeBase
 
 public:
 	AShooterGameMode();
+
+	UFUNCTION(BlueprintCallable, Category = "Gameplay")
+	void RequestRespawn(AController* Controller);
+
+protected:
+	void RespawnPlayer(AController* Controller);
 };

@@ -9,5 +9,5 @@ namespace ShooterTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Muzzle);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Reload);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Damage_Hit);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Player_Death);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Damage_Death);
 }

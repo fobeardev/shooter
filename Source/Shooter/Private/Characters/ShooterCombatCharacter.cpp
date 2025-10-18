@@ -1,7 +1,14 @@
 #include "Characters/ShooterCombatCharacter.h"
+#include "Components/CapsuleComponent.h"
 #include "Abilities/AttrSet_Combat.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffectExtension.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Controller.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameplayCueManager.h"
+#include "GameplayTagsManager.h"
+#include "GameFramework/Actor.h"
 #include "Net/UnrealNetwork.h"
 
 AShooterCombatCharacter::AShooterCombatCharacter()
@@ -19,9 +26,22 @@ AShooterCombatCharacter::AShooterCombatCharacter()
 void AShooterCombatCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
 	if (ASC)
 	{
 		ASC->InitAbilityActorInfo(this, this);
+
+		// --- Force-register our default subobject attribute set
+		if (CombatAttributes && !ASC->GetSpawnedAttributes_Mutable().Contains(CombatAttributes))
+		{
+			ASC->GetSpawnedAttributes_Mutable().Add(CombatAttributes);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[ASC] Registered attribute sets for %s:"), *GetNameSafe(this));
+	for (UAttributeSet* Set : ASC->GetSpawnedAttributes_Mutable())
+	{
+		UE_LOG(LogTemp, Log, TEXT(" - %s"), *Set->GetClass()->GetName());
 	}
 }
 
@@ -43,6 +63,26 @@ float AShooterCombatCharacter::GetMaxHealth() const
 bool AShooterCombatCharacter::IsDead() const
 {
 	return bIsDead || (GetHealth() <= 0.f);
+}
+
+void AShooterCombatCharacter::OnOutOfHealth()
+{
+	if (bIsDead) return;
+	bIsDead = true;
+
+	// Trigger death GameplayCue if available
+	if (ASC)
+	{
+		FGameplayTag DeathCue = FGameplayTag::RequestGameplayTag(FName("GameplayCue.Damage.Death"));
+		ASC->ExecuteGameplayCue(DeathCue);
+	}
+
+	// Disable input and movement
+	DisableInput(nullptr);
+	GetCharacterMovement()->DisableMovement();
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	HandleDeath();
 }
 
 void AShooterCombatCharacter::HandleHealthChanged(float NewHealth, float MaxHealth)

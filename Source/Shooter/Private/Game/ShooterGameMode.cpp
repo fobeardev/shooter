@@ -14,3 +14,19 @@ AShooterGameMode::AShooterGameMode()
     // GameStateClass   = AShooterGameState::StaticClass();
     // HUDClass         = AShooterHUD::StaticClass();
 }
+
+void AShooterGameMode::RequestRespawn(AController* Controller)
+{
+    if (!Controller) return;
+
+    FTimerHandle RespawnTimer;
+    FTimerDelegate RespawnDelegate = FTimerDelegate::CreateUObject(this, &AShooterGameMode::RespawnPlayer, Controller);
+    GetWorldTimerManager().SetTimer(RespawnTimer, RespawnDelegate, 2.0f, false);
+}
+
+void AShooterGameMode::RespawnPlayer(AController* Controller)
+{
+    if (!Controller) return;
+
+    RestartPlayer(Controller);
+}

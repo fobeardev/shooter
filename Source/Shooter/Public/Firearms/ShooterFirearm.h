@@ -5,6 +5,9 @@
 #include "Weapons/ShooterWeaponBase.h"
 #include "ShooterFirearm.generated.h"
 
+class UGameplayEffect;
+class UBulletDataAsset;
+
 // SKG forward decls
 class USKGFirearmComponent;
 class USKGAttachmentManagerComponent;
@@ -42,6 +45,14 @@ protected:
 	// --- AActor
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|GAS")
+	TSoftClassPtr<UGameplayEffect> DamageGameplayEffectClass;
+
+	// --- Terminal Ballistics Configuration ---
+	/** Bullet Data Asset defining mass, radius, drag, tracer, etc. */
+	UPROPERTY(EditDefaultsOnly, Category = "Ballistics")
+	TSoftObjectPtr<UBulletDataAsset> BulletDataAsset;
 
 	// ------------------------------
 	// SKG Components (keep these exact)
@@ -83,6 +94,13 @@ protected:
 	// Server authoritative spawn entry (if you want a pure C++ path)
 	UFUNCTION(Server, Reliable)
 	void Server_LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform);
+
+	// --- TB dynamic delegate handlers ---
+	UFUNCTION()
+	void OnBulletHit_TB(const FTBImpactParams& Impact);
+
+	UFUNCTION()
+	void OnBulletUpdate_TB(const FTBProjectileFlightData& Flight);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Firearm|Projectile")

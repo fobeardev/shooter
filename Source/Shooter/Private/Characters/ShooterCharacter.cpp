@@ -19,6 +19,7 @@
 #include "Tags/ShooterGameplayTags.h"
 #include "Weapons/ShooterWeaponBase.h"
 #include "Firearms/ShooterFirearm.h"
+#include "Game/ShooterGameMode.h"
 
 AShooterCharacter::AShooterCharacter()
 {
@@ -38,12 +39,6 @@ AShooterCharacter::AShooterCharacter()
 	// Rotate mesh to face +X forward (typical if model faces +Y)
 	GetMesh()->SetRelativeRotation(FRotator(0.f, -90.f, 0.f));
 
-	ASC = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
-	ASC->SetIsReplicated(true);
-	ASC->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
-
-	CombatAttributes = CreateDefaultSubobject<UAttrSet_Combat>(TEXT("AttrSet_Combat"));
-	
 	// SKG Shooter Framework pawn component
 	SKGShooterPawn = CreateDefaultSubobject<USKGShooterPawnComponent>(TEXT("SKGShooterPawn"));
 
@@ -526,6 +521,14 @@ void AShooterCharacter::UpdateControllerPitchClamp()
 	{
 		PC->PlayerCameraManager->ViewPitchMin = MinPitch;
 		PC->PlayerCameraManager->ViewPitchMax = MaxPitch;
+	}
+}
+
+void AShooterCharacter::HandleDeath()
+{
+	if (AShooterGameMode* GM = GetWorld()->GetAuthGameMode<AShooterGameMode>())
+	{
+		GM->RequestRespawn(GetController());
 	}
 }
 

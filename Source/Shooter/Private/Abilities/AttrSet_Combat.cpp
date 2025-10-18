@@ -1,6 +1,7 @@
 #include "Abilities/AttrSet_Combat.h"
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectExtension.h"
+#include <Characters/ShooterCombatCharacter.h>
 
 UAttrSet_Combat::UAttrSet_Combat()
 {
@@ -18,17 +19,27 @@ void UAttrSet_Combat::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttrSet_Combat, MoveSpeed, COND_None, REPNOTIFY_Always);
 }
 
-void UAttrSet_Combat::OnRep_Health(const FGameplayAttributeData& OldValue)
+void UAttrSet_Combat::OnRep_Health(const FGameplayAttributeData& OldValue) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttrSet_Combat, Health, OldValue);
 }
 
-void UAttrSet_Combat::OnRep_MaxHealth(const FGameplayAttributeData& OldValue)
+void UAttrSet_Combat::OnRep_MaxHealth(const FGameplayAttributeData& OldValue) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttrSet_Combat, MaxHealth, OldValue);
 }
 
-void UAttrSet_Combat::OnRep_MoveSpeed(const FGameplayAttributeData& OldValue)
+void UAttrSet_Combat::OnRep_Stamina(const FGameplayAttributeData& OldValue) const
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttrSet_Combat, Stamina, OldValue);
+}
+
+void UAttrSet_Combat::OnRep_MaxStamina(const FGameplayAttributeData& OldValue) const
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttrSet_Combat, MaxStamina, OldValue);
+}
+
+void UAttrSet_Combat::OnRep_MoveSpeed(const FGameplayAttributeData& OldValue) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttrSet_Combat, MoveSpeed, OldValue);
 }
@@ -40,8 +51,21 @@ void UAttrSet_Combat::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	// Clamp health to [0, MaxHealth]
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
-		const float NewHealth = FMath::Clamp(GetHealth(), 0.f, GetMaxHealth());
-		SetHealth(NewHealth);
-		// If you want to trigger death here when NewHealth <= 0, you can do it later.
+		const float Clamped = FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth());
+		SetHealth(Clamped);
+
+		if (Clamped <= 0.0f)
+		{
+			if (AShooterCombatCharacter* OwnerChar = Cast<AShooterCombatCharacter>(GetOwningActor()))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("%s has died."), *OwnerChar->GetName());
+				OwnerChar->OnOutOfHealth();
+			}
+		}
 	}
+}
+
+void UAttrSet_Combat::HandleHealthChanged(float OldValue, float NewValue)
+{
+	// Optional: broadcast delegate or cue here
 }
