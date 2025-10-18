@@ -40,7 +40,7 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Dash_End, "GameplayCue.Dash.End"
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Weapon_Muzzle, "GameplayCue.Weapon.Muzzle");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Weapon_Reload, "GameplayCue.Weapon.Reload");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Damage_Hit, "GameplayCue.Damage.Hit");
-UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Player_Death, "GameplayCue.Player.Death");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Damage_Death, "GameplayCue.Damage.Death");
 
 // Data
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Data_Health_Current, "Data.Health.Current");

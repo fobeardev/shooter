@@ -23,10 +23,11 @@ public class Shooter : ModuleRules
             "SKGProceduralAnim",
             "SKGMuzzle",                
 			"SKGAttachment",            
-			"SKGProjectile"             
+			"SKGProjectile",
+			"TerminalBallistics",
         });
 
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
+        PrivateDependencyModuleNames.AddRange(new string[] {  });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });

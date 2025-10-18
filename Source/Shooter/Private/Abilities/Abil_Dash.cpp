@@ -15,7 +15,9 @@ UAbil_Dash::UAbil_Dash()
     NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
     Tag_Ability_Dash = FGameplayTag::RequestGameplayTag(FName("Ability.Movement.Dash"));
-    AbilityTags.AddTag(Tag_Ability_Dash);
+
+    SetAssetTags(FGameplayTagContainer(Tag_Ability_Dash));
+
     ActivationOwnedTags.AddTag(Tag_Ability_Dash);
 
     Cue_DashStart = FGameplayTag::RequestGameplayTag(FName("GameplayCue.Dash.Start"));

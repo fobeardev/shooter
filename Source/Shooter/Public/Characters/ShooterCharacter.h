@@ -1,188 +1,60 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
-#include "AbilitySystemInterface.h"
+#include "Characters/ShooterCombatCharacter.h"
 #include "GameplayTagContainer.h"
 #include "ShooterCharacter.generated.h"
 
-class UAbilitySystemComponent;
 class UGameplayAbility;
 class UGameplayEffect;
-class UAttrSet_Combat;
 class UCameraComponent;
 class USpringArmComponent;
 class USKGShooterPawnComponent;
+class AShooterWeaponBase;
+class AActor;
+struct FInputActionValue;
 
+/**
+ * Player-controlled shooter character.
+ * Extends AShooterCombatCharacter with:
+ *  - Camera system (FP/TP)
+ *  - Dash abilities and charge logic
+ *  - Firearm spawning / SKG integration
+ *  - Player input handling
+ */
 UCLASS()
-class SHOOTER_API AShooterCharacter : public ACharacter, public IAbilitySystemInterface
+class SHOOTER_API AShooterCharacter : public AShooterCombatCharacter
 {
 	GENERATED_BODY()
 
 public:
 	AShooterCharacter();
 
-	// IAbilitySystemInterface
-	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	// --- Input ---
+	void Input_Look(const FVector2D& LookAxis);
+	void Input_Move(const FVector2D& MoveAxis);
+	void Input_Dash();
+	void Input_Aim(const FInputActionValue& Value);
+	void Input_FirePressed();
+	void Input_FireReleased();
 
-	// Camera and input
+	// --- Camera ---
 	UFUNCTION(BlueprintCallable, Category = "Shooter|Camera")
 	void SetUseThirdPersonCamera(bool bEnable);
 
 	UFUNCTION(BlueprintPure, Category = "Shooter|Camera")
 	bool IsUsingThirdPersonCamera() const { return bUseThirdPersonCamera; }
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Input")
-	void Input_Look(const FVector2D& LookAxis);
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Input")
-	void Input_Move(const FVector2D& MoveAxis);
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Input")
-	void Input_Dash();
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Input")
-	void Input_Aim(const FInputActionValue& Value);
-	UFUNCTION(BlueprintCallable, Category = "Shooter|GAS")  
-	bool IsInIFrame() const;
-
-	// Spawn default firearm (call on server or it will route to server)
+	// --- Firearm ---
 	UFUNCTION(BlueprintCallable, Category = "Shooter|Firearm")
 	void SpawnDefaultFirearm();
-protected:
-	virtual void BeginPlay() override;
-	virtual void PossessedBy(AController* NewController) override;
-	virtual void OnRep_PlayerState() override;
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// --- GAS core ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|GAS")
-	TObjectPtr<UAbilitySystemComponent> ASC;
+	UFUNCTION(BlueprintPure, Category = "Shooter|Firearm")
+	AShooterWeaponBase* GetEquippedWeapon() const;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|GAS")
-	TObjectPtr<UAttrSet_Combat> CombatAttributes;
+	FORCEINLINE USKGShooterPawnComponent* GetShooterPawnComponent() const { return SKGShooterPawn; }
 
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
-	TSubclassOf<UGameplayAbility> DashAbilityClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
-	TSubclassOf<UGameplayEffect> GE_DashIFrames;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Tags")
-	FGameplayTag Tag_Ability_Dash;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Tags")
-	FGameplayTag Tag_State_IFrame;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|SKG", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<USKGShooterPawnComponent> SKGShooterPawn;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Tags")
-	FGameplayTag Tag_State_Aiming;
-
-	// --- Cameras ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")
-	TObjectPtr<UCameraComponent> FirstPersonCamera;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")
-	TObjectPtr<USpringArmComponent> ThirdPersonBoom;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")
-	TObjectPtr<UCameraComponent> ThirdPersonCamera;
-
-	// Replicated camera mode for listen and dedicated
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_UseThirdPersonCamera, Category = "Shooter|Camera")
-	bool bUseThirdPersonCamera = false;
-
-	// FP socket and FOV
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	FName FirstPersonCameraSocket = TEXT("S_Camera"); 
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	float FirstPersonFOV = 90.0f;
-
-	// TP defaults
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	float ThirdPersonFOV = 90.0f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	float ThirdPersonTargetArm = 300.0f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	FVector ThirdPersonBoomOffset = FVector(0.0f, 50.0f, 70.0f);
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	FRotator ThirdPersonCameraRelativeRot = FRotator(0.0f, -10.0f, 0.0f);
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	bool bThirdPersonLag = true;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	float ThirdPersonLagSpeed = 12.0f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
-	float ThirdPersonLagMaxDist = 40.0f;
-
-	// Sensitivity and pitch limits
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shooter|Camera")
-	float MouseYawSensitivity = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shooter|Camera")
-	float MousePitchSensitivity = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shooter|Camera")
-	float MinPitch = -85.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shooter|Camera")
-	float MaxPitch = 85.f;
-
-	// --- Dash charges ---
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Dash|Charges")
-	int32 MaxDashCharges = 2;
-
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Shooter|Dash|Charges")
-	int32 CurrentDashCharges = 2;
-
-	/** Legacy per-charge ticking delay (only used if bRefillAllAtOnce=false) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Dash|Charges", meta = (EditCondition = "!bRefillAllAtOnce"))
-	float DashRechargeDelay = 1.0f;
-
-	/** Hades-like: after the last dash, wait this long, then refill ALL charges at once */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Dash|Charges")
-	bool bRefillAllAtOnce = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Dash|Charges", meta = (EditCondition = "bRefillAllAtOnce"))
-	float RefillAllDelay = 0.80f; // tune: 0.7-1.0s
-
-	// Replicated to owner for UI
-	UPROPERTY(ReplicatedUsing = OnRep_DashCharges)
-	int32 Rep_CurrentDashCharges = 2;
-
-	UFUNCTION()
-	void OnRep_DashCharges();
-
-	// Prevent duplicate ability grants
-	UPROPERTY(VisibleInstanceOnly, Category = "Shooter|Abilities")
-	bool bStartupAbilitiesGiven = false;
-
-	// Class to spawn
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
-	TSubclassOf<AActor> DefaultFirearmClass;
-
-	// Socket to attach to (matches your BP: ik_hand_gun)
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
-	FName FirearmAttachSocket = TEXT("ik_hand_gun");
-
-	// Keep a reference locally if you want (not required for replication)
-	UPROPERTY(Transient)
-	TObjectPtr<AActor> SpawnedFirearm;
-
-	// Server RPC that performs the spawn/attach and SetHeldActor
-	UFUNCTION(Server, Reliable)
-	void Server_SpawnDefaultFirearm();
-
-	// Internal implementation used by server only
-	void SpawnDefaultFirearm_Internal();
-
-public:
-	// --- Dash charge API ---
+	// --- Dash API ---
 	UFUNCTION(BlueprintPure, Category = "Shooter|Dash|Charges")
 	int32 GetCurrentDashCharges() const { return CurrentDashCharges; }
 
@@ -193,7 +65,7 @@ public:
 	bool HasDashCharge() const { return CurrentDashCharges > 0; }
 
 	bool ConsumeDashCharge();
-	void EnsureDashRechargeRunning();       // starts or refreshes the correct timer
+	void EnsureDashRechargeRunning();
 
 	// Client-only visual refund if Commit fails
 	void AddDashChargeLocal(int32 Delta)
@@ -201,30 +73,139 @@ public:
 		CurrentDashCharges = FMath::Clamp(CurrentDashCharges + Delta, 0, MaxDashCharges);
 	}
 
-protected:
-	// Timers
-	FTimerHandle DashRechargeTimer;         // used for BOTH modes
-	void DashRechargeTick_PerCharge();      // legacy +1 tick
-	void OnRefillAllTimer();                // Hades-like refill-to-max
+	UFUNCTION(BlueprintPure, Category = "Shooter|GAS")
+	bool IsInIFrame() const;
 
-	// GAS lifecycle
+protected:
+	virtual void BeginPlay() override;
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_PlayerState() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// --- Abilities ---
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
+	TSubclassOf<UGameplayAbility> DashAbilityClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
+	TSubclassOf<UGameplayAbility> FireWeaponAbilityClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
+	TSubclassOf<UGameplayEffect> GE_DashIFrames;
+
+	bool bStartupAbilitiesGiven = false;
 	void InitializeASC();
 	void GrantStartupAbilities();
+
+	// --- Dash ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Dash")
+	int32 MaxDashCharges = 2;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Shooter|Dash")
+	int32 CurrentDashCharges = 2;
+
+	UPROPERTY(ReplicatedUsing = OnRep_DashCharges)
+	int32 Rep_CurrentDashCharges = 2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Dash")
+	bool bRefillAllAtOnce = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Dash", meta = (EditCondition = "bRefillAllAtOnce"))
+	float RefillAllDelay = 0.8f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Dash")
+	float DashRechargeDelay = 1.0f;
+
+	UFUNCTION()
+	void OnRep_DashCharges();
+
+	FTimerHandle DashRechargeTimer;
+	void DashRechargeTick_PerCharge();
+	void OnRefillAllTimer();
+
+	// --- Firearm ---
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
+	TSubclassOf<AActor> DefaultFirearmClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
+	FName FirearmAttachSocket = TEXT("ik_hand_gun");
+
+	UPROPERTY(Transient)
+	TObjectPtr<AActor> SpawnedFirearm;
+
+	UFUNCTION(Server, Reliable)
+	void Server_SpawnDefaultFirearm();
+
+	void SpawnDefaultFirearm_Internal();
+
+	// --- SKG ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|SKG")
+	TObjectPtr<USKGShooterPawnComponent> SKGShooterPawn;
+
+	// --- Camera ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")
+	TObjectPtr<UCameraComponent> FirstPersonCamera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")
+	TObjectPtr<USpringArmComponent> ThirdPersonBoom;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")
+	TObjectPtr<UCameraComponent> ThirdPersonCamera;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_UseThirdPersonCamera, Category = "Shooter|Camera")
+	bool bUseThirdPersonCamera = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	FName FirstPersonCameraSocket = TEXT("S_Camera");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	float FirstPersonFOV = 90.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	float ThirdPersonFOV = 90.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	float ThirdPersonTargetArm = 300.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	FVector ThirdPersonBoomOffset = FVector(0.f, 50.f, 70.f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	FRotator ThirdPersonCameraRelativeRot = FRotator(0.f, -10.f, 0.f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	bool bThirdPersonLag = true;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	float ThirdPersonLagSpeed = 12.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Camera")
+	float ThirdPersonLagMaxDist = 40.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shooter|Camera")
+	float MouseYawSensitivity = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shooter|Camera")
+	float MousePitchSensitivity = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shooter|Camera")
+	float MinPitch = -85.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shooter|Camera")
+	float MaxPitch = 85.f;
+
+	UFUNCTION()
+	void OnRep_UseThirdPersonCamera();
+
+	void ApplyCameraMode();
+	void ConfigureCameraDefaultsOnce();
+	void UpdateControllerPitchClamp();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetUseThirdPersonCamera(bool bEnable);
 
 	// Dash RPC
 	UFUNCTION(Server, Reliable)
 	void ServerTryActivateDash();
 
-	// Camera replication hook
-	UFUNCTION()
-	void OnRep_UseThirdPersonCamera();
-
-	// Camera helpers
-	void ApplyCameraMode();
-	void ConfigureCameraDefaultsOnce();
-	void UpdateControllerPitchClamp();
-
-	// Camera mode RPC for correctness over network
-	UFUNCTION(Server, Reliable)
-	void ServerSetUseThirdPersonCamera(bool bEnable);
+	virtual void HandleDeath() override;
 };

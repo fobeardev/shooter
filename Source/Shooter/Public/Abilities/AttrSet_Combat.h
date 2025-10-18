@@ -33,6 +33,14 @@ public:
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UAttrSet_Combat, MaxHealth)
 
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing = OnRep_Stamina)
+	FGameplayAttributeData Stamina;
+	ATTRIBUTE_ACCESSORS(UAttrSet_Combat, Stamina)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing = OnRep_MaxStamina)
+	FGameplayAttributeData MaxStamina;
+	ATTRIBUTE_ACCESSORS(UAttrSet_Combat, MaxStamina)
+
 	// --- Optional: move speed you can tweak with dash/meta ---
 	UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing = OnRep_MoveSpeed)
 	FGameplayAttributeData MoveSpeed;
@@ -44,11 +52,21 @@ public:
 
 protected:
 	UFUNCTION()
-	void OnRep_Health(const FGameplayAttributeData& OldValue);
+	void OnRep_Health(const FGameplayAttributeData& OldValue) const;
 
 	UFUNCTION()
-	void OnRep_MaxHealth(const FGameplayAttributeData& OldValue);
+	void OnRep_MaxHealth(const FGameplayAttributeData& OldValue) const;
 
 	UFUNCTION()
-	void OnRep_MoveSpeed(const FGameplayAttributeData& OldValue);
+	void OnRep_Stamina(const FGameplayAttributeData& OldValue) const;
+
+	UFUNCTION()
+	void OnRep_MaxStamina(const FGameplayAttributeData& OldValue) const;
+
+	UFUNCTION()
+	void OnRep_MoveSpeed(const FGameplayAttributeData& OldValue) const;
+
+protected:
+
+	void HandleHealthChanged(float OldValue, float NewValue);
 };

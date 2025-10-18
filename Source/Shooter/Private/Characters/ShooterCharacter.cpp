@@ -17,6 +17,9 @@
 // Project
 #include "Abilities/AttrSet_Combat.h"
 #include "Tags/ShooterGameplayTags.h"
+#include "Weapons/ShooterWeaponBase.h"
+#include "Firearms/ShooterFirearm.h"
+#include "Game/ShooterGameMode.h"
 
 AShooterCharacter::AShooterCharacter()
 {
@@ -24,8 +27,8 @@ AShooterCharacter::AShooterCharacter()
 
 	bReplicates = true;
 	SetReplicateMovement(true);
-	NetUpdateFrequency = 100.f;
-	MinNetUpdateFrequency = 33.f;
+	SetNetUpdateFrequency(100.f);
+	SetMinNetUpdateFrequency(33.f);
 
 	// Ensure mesh is attached to capsule (typical Character already is, but explicit is fine)
 	GetMesh()->SetupAttachment(RootComponent);
@@ -36,12 +39,6 @@ AShooterCharacter::AShooterCharacter()
 	// Rotate mesh to face +X forward (typical if model faces +Y)
 	GetMesh()->SetRelativeRotation(FRotator(0.f, -90.f, 0.f));
 
-	ASC = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
-	ASC->SetIsReplicated(true);
-	ASC->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
-
-	CombatAttributes = CreateDefaultSubobject<UAttrSet_Combat>(TEXT("AttrSet_Combat"));
-	
 	// SKG Shooter Framework pawn component
 	SKGShooterPawn = CreateDefaultSubobject<USKGShooterPawnComponent>(TEXT("SKGShooterPawn"));
 
@@ -68,12 +65,9 @@ AShooterCharacter::AShooterCharacter()
 
 	// First person camera attached to head socket
 	FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
-	FirstPersonCamera->SetupAttachment(GetMesh(), FirstPersonCameraSocket); // "head" by default
-	FirstPersonCamera->SetRelativeLocation(FVector(10.f, 0.f, 10.f));
-	FirstPersonCamera->SetRelativeRotation(FRotator::ZeroRotator);
+	FirstPersonCamera->SetupAttachment(GetMesh(), FirstPersonCameraSocket); // "S_Camera" by default
 	FirstPersonCamera->bUsePawnControlRotation = true;
 	FirstPersonCamera->FieldOfView = FirstPersonFOV;
-	FirstPersonCamera->SetAutoActivate(true);
 
 	// Movement orientation: aim with controller in FP; keep movement-driven yaw off
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
@@ -98,10 +92,6 @@ AShooterCharacter::AShooterCharacter()
 		bUseControllerRotationRoll = false;
 	}
 
-	Tag_Ability_Dash = ShooterTags::Ability_Movement_Dash;
-	Tag_State_IFrame = ShooterTags::State_IFrame;
-	Tag_State_Aiming = ShooterTags::State_ADS;
-
 	// Charges defaults
 	MaxDashCharges = 2;
 	CurrentDashCharges = MaxDashCharges;
@@ -117,8 +107,6 @@ AShooterCharacter::AShooterCharacter()
 
 	UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: Ctor: Max=%d Curr=%d Delay=%.2f"), MaxDashCharges, CurrentDashCharges, DashRechargeDelay);
 }
-
-UAbilitySystemComponent* AShooterCharacter::GetAbilitySystemComponent() const { return ASC; }
 
 void AShooterCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -140,12 +128,6 @@ void AShooterCharacter::BeginPlay()
 	if (HasAuthority() && DefaultFirearmClass)
 	{
 		SpawnDefaultFirearm_Internal();
-	}
-
-	// Ensure FP camera snaps to the head socket at runtime even if mesh changes
-	if (FirstPersonCamera && GetMesh())
-	{
-		FirstPersonCamera->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FirstPersonCameraSocket);
 	}
 
 	ConfigureCameraDefaultsOnce();
@@ -217,9 +199,9 @@ void AShooterCharacter::Input_Dash()
 
 	if (HasAuthority())
 	{
-		if (ASC && Tag_Ability_Dash.IsValid())
+		if (ASC)
 		{
-			ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(Tag_Ability_Dash));
+			ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(ShooterTags::Ability_Movement_Dash));
 		}
 	}
 	else
@@ -252,20 +234,49 @@ void AShooterCharacter::Input_Aim(const FInputActionValue& Value)
 		SKGShooterPawn->StopAiming();
 	}
 
-	if (ASC && Tag_State_Aiming.IsValid())
+	if (ASC)
 	{
 		if (bPressed)
 		{
-			ASC->AddLooseGameplayTag(Tag_State_Aiming);
+			ASC->AddLooseGameplayTag(ShooterTags::State_ADS);
 		}
-		else 
+		else
 		{
-			ASC->RemoveLooseGameplayTag(Tag_State_Aiming);
+			ASC->RemoveLooseGameplayTag(ShooterTags::State_ADS);
 		}
 
 		bool bHasTag = ASC->HasMatchingGameplayTag(ShooterTags::State_ADS);
 		UE_LOG(LogTemp, Warning, TEXT("Aiming Tag Active: %d"), bHasTag);
 	}
+}
+
+// ------------------------------------------------------------
+// NEW: Input_FirePressed / Input_FireReleased
+// ------------------------------------------------------------
+void AShooterCharacter::Input_FirePressed()
+{
+	if (!ASC) return;
+
+	// Try to activate the weapon fire ability (mapped to Ability.Weapon.Fire)
+	ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(ShooterTags::Ability_Weapon_Fire));
+}
+
+void AShooterCharacter::Input_FireReleased()
+{
+	if (!ASC) return;
+
+	// Stop any active fire ability
+	FGameplayTagContainer TagsToCancel;
+	TagsToCancel.AddTag(ShooterTags::Ability_Weapon_Fire);
+	ASC->CancelAbilities(&TagsToCancel);
+}
+
+// ------------------------------------------------------------
+// NEW: GetEquippedWeapon
+// ------------------------------------------------------------
+AShooterWeaponBase* AShooterCharacter::GetEquippedWeapon() const
+{
+	return Cast<AShooterWeaponBase>(SpawnedFirearm);
 }
 
 // GAS setup
@@ -295,7 +306,7 @@ void AShooterCharacter::GrantStartupAbilities()
 	if (!bAlreadyHasDash && DashAbilityClass)
 	{
 		FGameplayAbilitySpec Spec(DashAbilityClass, 1, INDEX_NONE, this);
-		if (Tag_Ability_Dash.IsValid()) { Spec.DynamicAbilityTags.AddTag(Tag_Ability_Dash); }
+		Spec.GetDynamicSpecSourceTags().AddTag(ShooterTags::Ability_Movement_Dash);
 		ASC->GiveAbility(Spec);
 		UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: GrantStartupAbilities: Gave DashAbility"));
 	}
@@ -304,20 +315,27 @@ void AShooterCharacter::GrantStartupAbilities()
 		UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: GrantStartupAbilities: Skipped (already has dash)"));
 	}
 
+	if (FireWeaponAbilityClass)
+	{
+		FGameplayAbilitySpec Spec(FireWeaponAbilityClass, 1, INDEX_NONE, this);
+		Spec.GetDynamicSpecSourceTags().AddTag(ShooterTags::Ability_Weapon_Fire);
+		ASC->GiveAbility(Spec);
+	}
+
 	bStartupAbilitiesGiven = true;
 	ASC->InitAbilityActorInfo(this, this);
 }
 
 bool AShooterCharacter::IsInIFrame() const
 {
-	return ASC && Tag_State_IFrame.IsValid() && ASC->HasMatchingGameplayTag(Tag_State_IFrame);
+	return ASC && ASC->HasMatchingGameplayTag(ShooterTags::State_IFrame);
 }
 
 void AShooterCharacter::ServerTryActivateDash_Implementation()
 {
-	if (ASC && Tag_Ability_Dash.IsValid())
+	if (ASC)
 	{
-		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(Tag_Ability_Dash));
+		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(ShooterTags::Ability_Movement_Dash));
 	}
 }
 
@@ -494,8 +512,6 @@ void AShooterCharacter::ConfigureCameraDefaultsOnce()
 	{
 		FirstPersonCamera->bUsePawnControlRotation = true;
 		FirstPersonCamera->FieldOfView = FirstPersonFOV;
-		FirstPersonCamera->SetRelativeLocation(FVector(10.f, 0.f, 10.f));
-		FirstPersonCamera->SetRelativeRotation(FRotator::ZeroRotator);
 	}
 }
 
@@ -505,6 +521,14 @@ void AShooterCharacter::UpdateControllerPitchClamp()
 	{
 		PC->PlayerCameraManager->ViewPitchMin = MinPitch;
 		PC->PlayerCameraManager->ViewPitchMax = MaxPitch;
+	}
+}
+
+void AShooterCharacter::HandleDeath()
+{
+	if (AShooterGameMode* GM = GetWorld()->GetAuthGameMode<AShooterGameMode>())
+	{
+		GM->RequestRespawn(GetController());
 	}
 }
 
@@ -563,5 +587,11 @@ void AShooterCharacter::SpawnDefaultFirearm_Internal()
 	if (SKGShooterPawn)
 	{
 		SKGShooterPawn->SetHeldActor(NewFirearm);
+
+		// --- Tell the firearm who its pawn is for recoil / procedurals ---
+		if (AShooterFirearm* Firearm = Cast<AShooterFirearm>(NewFirearm))
+		{
+			Firearm->SetShooterPawn(SKGShooterPawn);
+		}
 	}
 }

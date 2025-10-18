@@ -1,136 +1,383 @@
 #include "Firearms/ShooterFirearm.h"
-#include "Components/SkeletalMeshComponent.h"
+
+// SKG
 #include "Components/SKGFirearmComponent.h"
 #include "Components/SKGAttachmentManagerComponent.h"
 #include "Components/SKGProceduralAnimComponent.h"
 #include "Components/SKGOffhandIKComponent.h"
-//#include "Components/SKGMuzzleComponent.h"
+#include "Components/SKGMuzzleComponent.h"
+#include "Components/SKGShooterPawnComponent.h"
+
+// TB
+#include "Subsystems/TerminalBallisticsSubsystem.h"
+#include "Core/TBBulletDataAsset.h"
+#include "Core/TBStatics.h"
+#include "Types/TBLaunchTypes.h"
+#include "Types/TBProjectileId.h"
+#include "Types/TBProjectileFlightData.h"
+#include "Types/TBImpactParams.h"
+
+// UE
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
-#include "GameFramework/Actor.h"
 #include "Net/UnrealNetwork.h"
+
+// Abilities
+#include "AbilitySystemGlobals.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "GameplayEffect.h"
+#include "GameplayEffectTypes.h"
+
+// Tags
+#include "Tags/ShooterGameplayTags.h"
+#include <AbilitySystemGlobals.h>
 
 AShooterFirearm::AShooterFirearm()
 {
-    PrimaryActorTick.bCanEverTick = false;
-    bReplicates = true;
-    SetReplicateMovement(true);
+	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;
+	SetReplicateMovement(true);
 
-    // Skeletal mesh root
-    FirearmMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>("FirearmMeshComponent");
-    RootComponent = FirearmMeshComponent;
+	// --- Components (unchanged order/roles) ---
+	FirearmMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirearmMeshComponent"));
+	RootComponent = FirearmMeshComponent;
 
-    // SKG components
-    FirearmComponent = CreateDefaultSubobject<USKGFirearmComponent>("FirearmComponent");
-    AttachmentManagerComponent = CreateDefaultSubobject<USKGAttachmentManagerComponent>("AttachmentManagerComponent");
-    ProceduralAnimComponent = CreateDefaultSubobject<USKGProceduralAnimComponent>("ProceduralAnimComponent");
-    //MuzzleComponent = CreateDefaultSubobject<USKGMuzzleComponent>("MuzzleComponent");
-    OffhandIKComponent = CreateDefaultSubobject<USKGOffhandIKComponent>("OffhandIKComponent");
+	FirearmComponent = CreateDefaultSubobject<USKGFirearmComponent>(TEXT("FirearmComponent"));
+	AttachmentManagerComponent = CreateDefaultSubobject<USKGAttachmentManagerComponent>(TEXT("AttachmentManagerComponent"));
+	ProceduralAnimComponent = CreateDefaultSubobject<USKGProceduralAnimComponent>(TEXT("ProceduralAnimComponent"));
+	MuzzleComponent = CreateDefaultSubobject<USKGMuzzleComponent>(TEXT("MuzzleComponent"));
+	OffhandIKComponent = CreateDefaultSubobject<USKGOffhandIKComponent>(TEXT("OffhandIKComponent"));
 
-    if (FirearmComponent)
-    {
-        FirearmComponent->bAutoInitialize = false; // we will initialize manually
-		FirearmComponent->SetFirearmMeshComponentName(FName("FirearmMeshComponent"));
-		FirearmComponent->SetAttachmentManagerComponentName(FName("AttachmentManagerComponent"));
-    }
+	// SKG init style (manual name wiring; we’ll init in BeginPlay)
+	if (FirearmComponent)
+	{
+		FirearmComponent->bAutoInitialize = false;
+		FirearmComponent->SetFirearmMeshComponentName(FirearmMeshComponent->GetFName());
+		FirearmComponent->SetAttachmentManagerComponentName(AttachmentManagerComponent->GetFName());
+	}
 
-    if (ProceduralAnimComponent)
-    {
-        ProceduralAnimComponent->bAutoInitialize = true;
-        ProceduralAnimComponent->bOverrideComponentNames = false;
-    }
+	if (ProceduralAnimComponent)
+	{
+		ProceduralAnimComponent->bAutoInitialize = true;
+		ProceduralAnimComponent->bOverrideComponentNames = false;
+	}
 
-    //if (MuzzleComponent)
-    //{
-    //    MuzzleComponent->bAutoInitialize = false;
-    //    MuzzleComponent->bOverrideComponentNames = true;
-    //}
-
-    if (OffhandIKComponent)
-    {
-        OffhandIKComponent->bAutoInitialize = false;
-        OffhandIKComponent->bOverrideComponentNames = true;
-    }
+	// Default tags for this firearm (can be overridden in BP)
+	WeaponClassTag = ShooterTags::Weapon_Class_AR;
+	DamageTypeTag = ShooterTags::Damage_Ballistic;
+	CurrentFireModeTag = ShooterTags::Weapon_FireMode_Semi;
 }
 
 void AShooterFirearm::BeginPlay()
 {
-    Super::BeginPlay();
-    UE_LOG(LogTemp, Log, TEXT("ShooterFirearm: BeginPlay called for %s"), *GetName());
+	Super::BeginPlay();
 
-    // Ensure components exist before wiring
-    if (!FirearmComponent || !FirearmMeshComponent)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[ShooterFirearm] Missing FirearmComponent or Mesh on %s"), *GetName());
-        return;
-    }
+	// Resolve & initialize SKG internals
+	if (ensure(FirearmComponent))
+	{
+		// Make sure the names are correct (safety if someone renames components)
+		FirearmComponent->SetFirearmMeshComponentName(FirearmMeshComponent->GetFName());
+		FirearmComponent->SetAttachmentManagerComponentName(
+			AttachmentManagerComponent ? AttachmentManagerComponent->GetFName() : NAME_None);
+		FirearmComponent->InitializeFirearmComponent();
+	}
 
-    // Match SKGFirearm constructor behavior — assign names so SetupComponents() can resolve them
-    const FName MeshName = FirearmMeshComponent->GetFName();
-    FirearmComponent->SetFirearmMeshComponentName(MeshName);
-    FirearmComponent->SetAttachmentManagerComponentName(
-        AttachmentManagerComponent ? AttachmentManagerComponent->GetFName() : NAME_None
-    );
-
-    // Now initialize the firearm logic (handles internal component discovery)
-    FirearmComponent->InitializeFirearmComponent();
-
-    // Debug verification
-    UE_LOG(LogTemp, Log, TEXT("[ShooterFirearm] Initialized firearm: %s"), *GetName());
-    if (USKGProceduralAnimComponent* Proc = FirearmComponent->GetCurrentProceduralAnimComponent())
-    {
-        UE_LOG(LogTemp, Log, TEXT("[ShooterFirearm] CurrentProceduralAnimComponent = %s"), *GetNameSafe(Proc));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[ShooterFirearm] No CurrentProceduralAnimComponent found on %s"), *GetName());
-    }
-
-    // Disable tick on mesh (handled procedurally by SKG)
-    if (FirearmMeshComponent)
-    {
-        FirearmMeshComponent->SetComponentTickEnabled(false);
-    }
-
-    // Validate core component references
-    LogComponentInitialization();
-}
-
-void AShooterFirearm::LogComponentInitialization() const
-{
-    UE_LOG(LogTemp, Warning, TEXT("=== AShooterFirearm Initialization ==="));
-    UE_LOG(LogTemp, Warning, TEXT("Owner: %s"), *GetName());
-
-    // Check each core component
-    UE_LOG(LogTemp, Warning, TEXT("FirearmMeshComponent: %s"), FirearmMeshComponent ? TEXT("Valid") : TEXT("NULL"));
-    UE_LOG(LogTemp, Warning, TEXT("FirearmComponent: %s"), FirearmComponent ? TEXT("Valid") : TEXT("NULL"));
-    UE_LOG(LogTemp, Warning, TEXT("AttachmentManagerComponent: %s"), AttachmentManagerComponent ? TEXT("Valid") : TEXT("NULL"));
-    UE_LOG(LogTemp, Warning, TEXT("ProceduralAnimComponent: %s"), ProceduralAnimComponent ? TEXT("Valid") : TEXT("NULL"));
-    //UE_LOG(LogTemp, Warning, TEXT("MuzzleComponent: %s"), MuzzleComponent ? TEXT("Valid") : TEXT("NULL"));
-    UE_LOG(LogTemp, Warning, TEXT("OffhandIKComponent: %s"), OffhandIKComponent ? TEXT("Valid") : TEXT("NULL"));
-
-    UE_LOG(LogTemp, Warning, TEXT("FirearmMesh Forward: %s"),
-        *FirearmMeshComponent->GetForwardVector().ToString());
-
-    // If procedural animation exists, confirm its setup
-    if (ProceduralAnimComponent)
-    {
-        UMeshComponent* Mesh = ProceduralAnimComponent->GetProceduralAnimMesh();
-        const bool bHasMesh = Mesh != nullptr;
-
-        UE_LOG(LogTemp, Warning, TEXT("ProceduralAnimComponent.Mesh: %s"), bHasMesh ? *Mesh->GetName() : TEXT("NULL"));
-
-        // Aim sockets
-        UE_LOG(LogTemp, Warning, TEXT("ProceduralAnimComponent AimSocketCount: %d"), ProceduralAnimComponent->ProceduralAimSocketNames.Num());
-        for (const FName& SocketName : ProceduralAnimComponent->ProceduralAimSocketNames)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("   AimSocket: %s"), *SocketName.ToString());
-        }
-    }
-
-    UE_LOG(LogTemp, Warning, TEXT("======================================"));
+	if (FirearmMeshComponent)
+	{
+		FirearmMeshComponent->SetComponentTickEnabled(false);
+	}
 }
 
 void AShooterFirearm::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	// Base already replicates CurrentFireModeTag & bIsReloading
+}
+
+// ===== WeaponBase contracts =====
+
+USkeletalMeshComponent* AShooterFirearm::GetWeaponMesh() const
+{
+	return FirearmMeshComponent;
+}
+
+bool AShooterFirearm::CanPerformAction() const
+{
+	// Enforce base rules + any firearm-specific ones here (e.g., not aiming transitions, chamber checks)
+	return Super::CanPerformAction();
+}
+
+// ===== Firing =====
+
+void AShooterFirearm::Fire()
+{
+	if (!CanPerformAction())
+	{
+		return;
+	}
+
+	// Local edge count for parity with your old graph (optional)
+	++PressCount;
+
+	// Client asks server to fire; server will then execute HandleFire_Internal (authoritative)
+	Server_Fire();
+
+	// Local prediction: if you want immediate client feedback, you can also call HandleFire_Internal() here
+	// HandleFire_Internal();
+}
+
+void AShooterFirearm::Server_Fire_Implementation()
+{
+	HandleFire_Internal();
+	BeginAutoIfNeeded();
+}
+
+void AShooterFirearm::StopFire()
+{
+	ClearFireTimers();
+	++ReleaseCount;
+}
+
+// One shot worth of work
+void AShooterFirearm::HandleFire_Internal()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Firearm] HandleFire_Internal called on %s"), *GetNameSafe(this));
+
+	if (!FirearmComponent)
+	{
+		return;
+	}
+
+	// Ask SKG for the correct muzzle transform (handles current muzzle, offsets, zeroing, etc.)
+	const FSKGMuzzleTransform MuzzleXform = FirearmComponent->GetMuzzleProjectileTransform(/*ZeroDistance*/100.f, /*MOA*/1.f);
+
+	// Server spawns “real” projectile; clients can run cosmetic only
+	if (HasAuthority())
+	{
+		Server_LaunchProjectile(MuzzleXform);
+	}
+
+	// SKG bookkeeping (heat, etc.)
+	FirearmComponent->ShotPerformed();
+
+	// Cosmetic local feedback
+	PlayFireEffects();
+
+	// (Optional) If you have a ShooterPawnComp cached, you can call:
+	if (ShooterPawn) 
+	{ 
+		ShooterPawn->PerformProceduralRecoil(FRotator(1.f), FVector(1.f), FRotator(1.f)); 
+	}
+}
+
+void AShooterFirearm::HandleStopFire_Internal()
+{
+	// Stop full-auto repeating timers (if you use one)
+	if (GetWorldTimerManager().IsTimerActive(AutoTimerHandle))
+	{
+		GetWorldTimerManager().ClearTimer(AutoTimerHandle);
+	}
+}
+
+void AShooterFirearm::BeginAutoIfNeeded()
+{
+	if (CurrentFireModeTag == ShooterTags::Weapon_FireMode_Auto)
+	{
+		// Loop while held; a real implementation may read ROF from your data asset
+		if (!GetWorldTimerManager().IsTimerActive(AutoTimerHandle))
+		{
+			GetWorldTimerManager().SetTimer(
+				AutoTimerHandle,
+				this,
+				&AShooterFirearm::HandleFire_Internal,
+				FMath::Max(0.01f, FireRateSeconds),
+				true
+			);
+		}
+	}
+	else if (CurrentFireModeTag == ShooterTags::Weapon_FireMode_Burst)
+	{
+		PendingBurstShots = BurstSize - 1; // already fired one in Server_Fire
+		if (PendingBurstShots > 0)
+		{
+			GetWorldTimerManager().SetTimer(
+				AutoTimerHandle,
+				[this]()
+				{
+					if (PendingBurstShots <= 0)
+					{
+						ClearFireTimers();
+						return;
+					}
+					HandleFire_Internal();
+					--PendingBurstShots;
+				},
+				FMath::Max(0.01f, FireRateSeconds),
+				true
+			);
+		}
+	}
+}
+
+void AShooterFirearm::ClearFireTimers()
+{
+	GetWorldTimerManager().ClearTimer(AutoTimerHandle);
+	PendingBurstShots = 0;
+}
+
+void AShooterFirearm::LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform, bool bIsLocalFire)
+{
+	if (!GetWorld())
+		return;
+
+	const FTransform Xf = LaunchTransform.ConvertToTransform();
+	const FVector FireLoc = Xf.GetLocation();
+	const FVector FireDir = Xf.GetRotation().GetForwardVector();
+
+	// Build Launch Params (note: Owner is set inside helper; required by TB statics)
+	FTBLaunchParams LaunchParams = UTerminalBallisticsStatics::MakeLaunchParamsWithDirectionVector(
+		/*ProjectileSpeed m/s*/        900.0,
+		/*EffectiveRange m*/           5000.0,
+		/*Timescale*/                  1.0,
+		/*Location*/                   FireLoc,
+		/*Direction*/                  FireDir,
+		/*ActorsToIgnore*/{ this },
+		/*ObjTypes*/                   UTerminalBallisticsStatics::GetDefaultObjectTypes(),
+		/*TraceChannel*/               ECC_GameTraceChannel10,
+		/*bIgnoreOwner*/               true,
+		/*bAddToOwnerVelocity*/        true,
+		/*bForceNoTracer*/             false,
+		/*Owner*/                      this,
+		/*InstigatorController*/       GetInstigatorController(),
+		/*GravityMultiplier*/          1.0,
+		/*OwnerIgnoreDistance*/        10.0,
+		/*TracerActivationDistance*/   25.0,
+		/*Payload*/                    nullptr
+	);
+
+	UBulletDataAsset* Bullet = nullptr;
+
+	if (BulletDataAsset.IsValid())
+	{
+		Bullet = BulletDataAsset.Get();
+	}
+	else if (BulletDataAsset.ToSoftObjectPath().IsValid())
+	{
+		Bullet = BulletDataAsset.LoadSynchronous();
+	}
+
+	if (!Bullet)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ShooterFirearm] No BulletDataAsset set on %s"), *GetNameSafe(this));
+		return;
+	}
+
+	const int32 DebugFlags =
+		(int32)ETBBallisticsDebugType::DrawDebugTrace |
+		(int32)ETBBallisticsDebugType::PrintDebugInfo;
+
+	// Dynamic delegates (Blueprint-style) — bind to UFUNCTIONs on this object
+	FBPOnBulletHit OnHitBP;
+	OnHitBP.BindUFunction(this, FName("OnBulletHit_TB"));
+
+	FBPOnProjectileUpdate OnUpdateBP;
+	OnUpdateBP.BindUFunction(this, FName("OnBulletUpdate_TB"));
+
+	// Empty delegates we don't currently need
+	FBPOnProjectileComplete OnCompleteBP;
+	FBPOnBulletExitHit OnExitHitBP;
+	FBPOnBulletInjure OnInjureBP;
+
+	// Fire the bullet
+	UTerminalBallisticsStatics::AddAndFireBulletWithCallbacksAndUpdate(
+		Bullet,
+		LaunchParams,
+		OnCompleteBP,
+		OnHitBP,
+		OnExitHitBP,
+		OnInjureBP,
+		OnUpdateBP,
+		FTBProjectileId::None,
+		DebugFlags
+	);
+}
+
+// ===== Projectile spawn server path =====
+
+void AShooterFirearm::Server_LaunchProjectile_Implementation(const FSKGMuzzleTransform& LaunchTransform)
+{
+	// Only run on server — spawns the authoritative projectile
+	LaunchProjectile(LaunchTransform, /*bIsLocalFire=*/false);
+}
+
+// --- TB delegate: OnHit (apply GAS damage) ---
+void AShooterFirearm::OnBulletHit_TB(const FTBImpactParams& Impact)
+{
+	// Server-authoritative damage
+	if (!HasAuthority())
+		return;
+
+	AActor* HitActor = Impact.HitResult.GetActor();
+	if (!HitActor || HitActor == this)
+		return;
+
+	// Source ASC (weapon owner) -> Target ASC (hit actor)
+	UAbilitySystemComponent* SourceASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HitActor);
+	if (!SourceASC || !TargetASC)
+		return;
+	if (!SourceASC || !TargetASC)
+		return;
+
+	// --- Compute basic ballistic energy scalar ---
+	const float ImpactSpeed = Impact.ImpactVelocity.Size();
+	const float ImpactEnergy = ImpactSpeed * 0.1f; // Simple kinetic proxy
+
+	// You can later replace this with: 0.5f * Mass * V^2
+
+	//const float MassKg = 0.02f;               // example bullet mass (20 grams)
+	//const float VelocityMS = Impact.ImpactVelocity.Size() / 100.0f; // convert cm/s to m/s
+	//const float ImpactEnergy = 0.5f * MassKg * FMath::Square(VelocityMS);
+
+	// but it is overkill for now (literally)
+
+	// --- Load ballistic damage GE from soft reference ---
+	TSubclassOf<UGameplayEffect> DamageGE = DamageGameplayEffectClass.LoadSynchronous();
+	if (!DamageGE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TB] Missing DamageGameplayEffectClass on %s"), *GetName());
+		return;
+	}
+
+	// --- Prepare context and spec ---
+	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+	Context.AddInstigator(GetOwner(), this);
+
+	FGameplayEffectSpecHandle SpecHandle = SourceASC->MakeOutgoingSpec(DamageGE, 1.0f, Context);
+	if (!SpecHandle.IsValid())
+		return;
+
+	// --- Pass dynamic damage value ---
+	SpecHandle.Data->SetSetByCallerMagnitude(
+		FGameplayTag::RequestGameplayTag(TEXT("Data.Weapon.DamageScalar")),
+		-ImpactEnergy
+	);
+
+	// --- Apply damage ---
+	TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+
+	UE_LOG(LogTemp, Log, TEXT("[TB] Hit %s | Speed=%.1f | Energy=%.1f | Surface=%d"),
+		*GetNameSafe(HitActor),
+		ImpactSpeed,
+		ImpactEnergy,
+		(int32)Impact.SurfaceType);
+}
+
+// --- TB delegate: per-tick flight update (optional logging) ---
+void AShooterFirearm::OnBulletUpdate_TB(const FTBProjectileFlightData& Flight)
+{
+	UE_LOG(LogTemp, Verbose, TEXT("[TB] Bullet @ %s | Vel=%.1f"),
+		*Flight.Location.ToString(),
+		Flight.Velocity.Size());
 }
