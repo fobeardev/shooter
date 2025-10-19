@@ -11,6 +11,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include <Components/SKGShooterPawnComponent.h>
+#include "Components/CapsuleComponent.h"
 #include "InputActionValue.h"
 #include "TimerManager.h"
 
@@ -20,6 +21,7 @@
 #include "Weapons/ShooterWeaponBase.h"
 #include "Firearms/ShooterFirearm.h"
 #include "Game/ShooterGameMode.h"
+#include <Kismet/GameplayStatics.h>
 
 AShooterCharacter::AShooterCharacter()
 {
@@ -164,6 +166,16 @@ void AShooterCharacter::PossessedBy(AController* NewController)
 	ConfigureCameraDefaultsOnce();
 	ApplyCameraMode();
 	UpdateControllerPitchClamp();
+
+	// Fade back in
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (PC->PlayerCameraManager)
+		{
+			PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, 0.8f, FLinearColor::Black, false, false);
+		}
+	}
+
 }
 
 void AShooterCharacter::OnRep_PlayerState()
@@ -526,9 +538,132 @@ void AShooterCharacter::UpdateControllerPitchClamp()
 
 void AShooterCharacter::HandleDeath()
 {
-	if (AShooterGameMode* GM = GetWorld()->GetAuthGameMode<AShooterGameMode>())
+	UE_LOG(LogTemp, Warning, TEXT("HandleDeath() triggered for %s"), *GetName());
+
+	SetUseThirdPersonCamera(true);
+	ApplyCameraMode();
+
+	// 1. Disable input (client side)
+	if (AController* C = GetController())
 	{
-		GM->RequestRespawn(GetController());
+		C->SetIgnoreMoveInput(true);
+		C->SetIgnoreLookInput(true);
+	}
+
+	// 2. Stop all abilities
+	if (ASC)
+	{
+		ASC->CancelAllAbilities();
+	}
+
+	// 3. Destroy equipped firearm
+	if (SpawnedFirearm)
+	{
+		SpawnedFirearm->Destroy();
+		SpawnedFirearm = nullptr;
+	}
+
+	// 4. Enable ragdoll on the mesh
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetCollisionProfileName(TEXT("Ragdoll"));
+		MeshComp->SetSimulatePhysics(true);
+		MeshComp->WakeAllRigidBodies();
+		MeshComp->bBlendPhysics = true;
+	}
+
+	// 5. Disable capsule collision (so ragdoll doesn’t pop)
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 6. Disable movement
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->DisableMovement();
+	}
+
+	// 7. Trigger GameplayCue (optional)
+	if (ASC)
+	{
+		ASC->ExecuteGameplayCue(ShooterTags::GameplayCue_Damage_Death);
+	}
+
+	// 8. Slow motion and fade to black
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		UGameplayStatics::SetGlobalTimeDilation(GetWorld(), 0.3f);
+
+		if (PC->PlayerCameraManager)
+		{
+			PC->PlayerCameraManager->StartCameraFade(0.f, 1.f, 1.0f, FLinearColor::Black, false, true);
+		}
+	}
+
+	// 9. Schedule respawn after short delay
+	if (HasAuthority())
+	{
+		FTimerHandle RespawnHandle;
+		GetWorldTimerManager().SetTimer(
+			RespawnHandle,
+			[this]()
+			{
+				UGameplayStatics::SetGlobalTimeDilation(GetWorld(), 1.0f);
+
+				AController* ControllerRef = GetController();
+				if (!ControllerRef)
+				{
+					UE_LOG(LogTemp, Error, TEXT("HandleDeath: No controller found."));
+					return;
+				}
+
+				AShooterGameMode* GM = GetWorld()->GetAuthGameMode<AShooterGameMode>();
+				if (!GM)
+				{
+					UE_LOG(LogTemp, Error, TEXT("HandleDeath: No GameMode found."));
+					return;
+				}
+
+				AShooterCharacter* OldCharacter = this;
+
+				UE_LOG(LogTemp, Warning, TEXT("HandleDeath: Unpossessing old pawn %s"), *GetName());
+				ControllerRef->UnPossess(); // <-- critical line
+
+				// Now spawn the new pawn cleanly
+				UE_LOG(LogTemp, Warning, TEXT("HandleDeath: Restarting player..."));
+				GM->RestartPlayer(ControllerRef);
+
+				APawn* NewPawn = ControllerRef->GetPawn();
+				if (!NewPawn)
+				{
+					UE_LOG(LogTemp, Error, TEXT("HandleDeath: Controller has no new pawn after RestartPlayer."));
+					return;
+				}
+
+				UE_LOG(LogTemp, Warning, TEXT("HandleDeath: Controller now possesses %s"), *GetNameSafe(NewPawn));
+
+				// Hide and destroy the old pawn
+				if (OldCharacter && OldCharacter != NewPawn)
+				{
+					if (USkeletalMeshComponent* MeshComp = OldCharacter->FindComponentByClass<USkeletalMeshComponent>())
+					{
+						MeshComp->SetHiddenInGame(true);
+					}
+
+					OldCharacter->Destroy();
+					UE_LOG(LogTemp, Warning, TEXT("HandleDeath: Old pawn destroyed."));
+				}
+
+				// Fade-in from black on respawn
+				if (APlayerController* PC = Cast<APlayerController>(ControllerRef))
+				{
+					if (PC->PlayerCameraManager)
+					{
+						PC->PlayerCameraManager->StartCameraFade(1.f, 0.f, 0.8f, FLinearColor::Black, false, false);
+					}
+				}
+			},
+			2.5f,
+			false
+		);
 	}
 }
 
@@ -604,17 +739,27 @@ void AShooterCharacter::Debug_ApplySelfDamage()
 		return;
 	}
 
+	// Load the GE class (use LoadClass, not LoadObject)
+	static TSubclassOf<UGameplayEffect> DamageEffectClass = LoadClass<UGameplayEffect>(
+		nullptr,
+		TEXT("/Game/Hadeslike/Abilities/GE/GE_Damage_Ballistic.GE_Damage_Ballistic_C")
+	);
+
+	if (!DamageEffectClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Debug_ApplySelfDamage: Could not find GE_Damage_Ballistic class"));
+		return;
+	}
+
 	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
 	Context.AddSourceObject(this);
 
-	// Create a damage spec using your standard damage effect
-	FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(UGameplayEffect::StaticClass(), 1.0f, Context);
+	FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(DamageEffectClass, 1.0f, Context);
 	if (SpecHandle.IsValid() && SpecHandle.Data.IsValid())
 	{
-		// Apply a lethal amount through SetByCaller
-		SpecHandle.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag("Data.Weapon.DamageScalar"), 99999.0f);
+		SpecHandle.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag("Data.Weapon.DamageScalar"), -99999.0f);
 		ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 
-		UE_LOG(LogTemp, Warning, TEXT("Debug_ApplySelfDamage: Applied lethal self-damage via GAS"));
+		UE_LOG(LogTemp, Warning, TEXT("Debug_ApplySelfDamage: Applied lethal self-damage via GAS (using GE_Damage_Ballistic)"));
 	}
 }
