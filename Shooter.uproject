@@ -11,7 +11,8 @@
 			"AdditionalDependencies": [
 				"SKGShooterFrameworkActors",
 				"Engine",
-				"GameplayAbilities"
+				"GameplayAbilities",
+				"AIModule"
 			]
 		}
 	],
