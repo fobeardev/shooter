@@ -41,7 +41,7 @@ public:
 
 	/** The primary mesh of this weapon (child overrides if needed). */
 	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
-	virtual USkeletalMeshComponent* GetWeaponMesh() const;
+	virtual USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMeshComponent; }
 
 	/** Current fire mode (replicated). */
 	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
@@ -55,9 +55,9 @@ protected:
 	virtual void HandleStopFire_Internal();    // default: no-op
 
 protected:
-	// ------------------------------
-	// Data & State (replicated where appropriate)
-	// ------------------------------
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	TObjectPtr<USkeletalMeshComponent> WeaponMeshComponent;
 
 	// Owner shooter pawn component (cached; NOT replicated)
 	UPROPERTY()

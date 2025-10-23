@@ -34,13 +34,20 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Burn, "State.Burn");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Shock, "State.Shock");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Slow, "State.Slow");
 
-// Cues (must start with GameplayCue.)
+// Enemy
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Enemy_Type_Charger, "Enemy.Type.Charger");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Enemy_Type_Marksman, "Enemy.Type.Marksman");
+
+// GameplayCues (must start with GameplayCue.)
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Dash_Start, "GameplayCue.Dash.Start");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Dash_End, "GameplayCue.Dash.End");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Weapon_Muzzle, "GameplayCue.Weapon.Muzzle");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Weapon_Reload, "GameplayCue.Weapon.Reload");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Damage_Hit, "GameplayCue.Damage.Hit");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Damage_Death, "GameplayCue.Damage.Death");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Enemy_Flank, "GameplayCue.Enemy.Flank");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Enemy_Retreat, "GameplayCue.Enemy.Retreat");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Combat_MeleeHit, "GameplayCue.Combat.MeleeHit");
 
 // Data
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Data_Health_Current, "Data.Health.Current");
@@ -65,6 +72,7 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Weapon_Class_Sniper, "Weapon.Class.Sniper");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Weapon_Class_LMG, "Weapon.Class.LMG");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Weapon_Class_Rocket, "Weapon.Class.Rocket");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Weapon_Class_Railgun, "Weapon.Class.Railgun");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Weapon_Class_Sword, "Weapon.Class.Sword");
 
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Weapon_FireMode_Semi, "Weapon.FireMode.Semi");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Weapon_FireMode_Burst, "Weapon.FireMode.Burst");

@@ -1,6 +1,6 @@
-#include "AI/BTTask_AttackTarget.h"
+#include "AI/Tasks/BTTask_AttackTarget.h"
 #include "AIController.h"
-#include "Characters/ShooterAICharacter.h"
+#include "Characters/AI/ShooterAICharacter.h"
 #include "AbilitySystemComponent.h"
 #include "Tags/ShooterGameplayTags.h"
 

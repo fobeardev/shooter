@@ -12,6 +12,13 @@ AShooterWeaponBase::AShooterWeaponBase()
 	WeaponClassTag = ShooterTags::Weapon_Class_AR;				// arbitrary default
 	DamageTypeTag = ShooterTags::Damage_Ballistic;				// default damage channel
 	CurrentFireModeTag = ShooterTags::Weapon_FireMode_Semi;		// default fire mode
+
+    WeaponMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("WeaponMesh"));
+    RootComponent = WeaponMeshComponent;
+
+    WeaponMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    WeaponMeshComponent->SetGenerateOverlapEvents(false);
+    WeaponMeshComponent->SetIsReplicated(true);
 }
 
 void AShooterWeaponBase::BeginPlay()
@@ -60,12 +67,6 @@ bool AShooterWeaponBase::CanPerformAction() const
 {
 	// Extend this in child if you add cooldowns/overheats/etc.
 	return !bIsReloading;
-}
-
-USkeletalMeshComponent* AShooterWeaponBase::GetWeaponMesh() const
-{
-	// Child returns its mesh. Base has no mesh by itself.
-	return nullptr;
 }
 
 void AShooterWeaponBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

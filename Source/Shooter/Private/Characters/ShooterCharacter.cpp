@@ -18,10 +18,9 @@
 // Project
 #include "Abilities/AttrSet_Combat.h"
 #include "Tags/ShooterGameplayTags.h"
-#include "Weapons/ShooterWeaponBase.h"
-#include "Firearms/ShooterFirearm.h"
 #include "Game/ShooterGameMode.h"
 #include <Kismet/GameplayStatics.h>
+#include "Firearms/ShooterFirearm.h"
 
 AShooterCharacter::AShooterCharacter()
 {
@@ -126,12 +125,6 @@ void AShooterCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Auto-equip on server at start if a class is set
-	if (HasAuthority() && DefaultFirearmClass)
-	{
-		SpawnDefaultFirearm_Internal();
-	}
-
 	ConfigureCameraDefaultsOnce();
 	ApplyCameraMode();
 	UpdateControllerPitchClamp();
@@ -185,6 +178,21 @@ void AShooterCharacter::OnRep_PlayerState()
 	ConfigureCameraDefaultsOnce();
 	ApplyCameraMode();
 	UpdateControllerPitchClamp();
+}
+
+void AShooterCharacter::SpawnDefaultWeapon_Internal()
+{
+	Super::SpawnDefaultWeapon_Internal();
+
+	if (SKGShooterPawn && EquippedWeapon)
+	{
+		SKGShooterPawn->SetHeldActor(EquippedWeapon);
+
+		if (AShooterFirearm* Firearm = Cast<AShooterFirearm>(EquippedWeapon))
+		{
+			Firearm->SetShooterPawn(SKGShooterPawn);
+		}
+	}
 }
 
 void AShooterCharacter::Input_Look(const FVector2D& LookAxis)
@@ -281,14 +289,6 @@ void AShooterCharacter::Input_FireReleased()
 	FGameplayTagContainer TagsToCancel;
 	TagsToCancel.AddTag(ShooterTags::Ability_Weapon_Fire);
 	ASC->CancelAbilities(&TagsToCancel);
-}
-
-// ------------------------------------------------------------
-// NEW: GetEquippedWeapon
-// ------------------------------------------------------------
-AShooterWeaponBase* AShooterCharacter::GetEquippedWeapon() const
-{
-	return Cast<AShooterWeaponBase>(SpawnedFirearm);
 }
 
 // GAS setup
@@ -556,14 +556,7 @@ void AShooterCharacter::HandleDeath()
 		ASC->CancelAllAbilities();
 	}
 
-	// 3. Destroy equipped firearm
-	if (SpawnedFirearm)
-	{
-		SpawnedFirearm->Destroy();
-		SpawnedFirearm = nullptr;
-	}
-
-	// 4. Enable ragdoll on the mesh
+	// 3. Enable ragdoll on the mesh
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
 		MeshComp->SetCollisionProfileName(TEXT("Ragdoll"));
@@ -572,22 +565,22 @@ void AShooterCharacter::HandleDeath()
 		MeshComp->bBlendPhysics = true;
 	}
 
-	// 5. Disable capsule collision (so ragdoll doesn’t pop)
+	// 4. Disable capsule collision (so ragdoll doesn’t pop)
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// 6. Disable movement
+	// 5. Disable movement
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		Move->DisableMovement();
 	}
 
-	// 7. Trigger GameplayCue (optional)
+	// 6. Trigger GameplayCue (optional)
 	if (ASC)
 	{
 		ASC->ExecuteGameplayCue(ShooterTags::GameplayCue_Damage_Death);
 	}
 
-	// 8. Slow motion and fade to black
+	// 7. Slow motion and fade to black
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		UGameplayStatics::SetGlobalTimeDilation(GetWorld(), 0.3f);
@@ -598,7 +591,7 @@ void AShooterCharacter::HandleDeath()
 		}
 	}
 
-	// 9. Schedule respawn after short delay
+	// 8. Schedule respawn after short delay
 	if (HasAuthority())
 	{
 		FTimerHandle RespawnHandle;
@@ -664,70 +657,6 @@ void AShooterCharacter::HandleDeath()
 			2.5f,
 			false
 		);
-	}
-}
-
-void AShooterCharacter::SpawnDefaultFirearm()
-{
-	// Mirror your BP: if not authority, route to server; otherwise do it now
-	if (!HasAuthority())
-	{
-		Server_SpawnDefaultFirearm();
-		return;
-	}
-	SpawnDefaultFirearm_Internal();
-}
-
-void AShooterCharacter::Server_SpawnDefaultFirearm_Implementation()
-{
-	SpawnDefaultFirearm_Internal();
-}
-
-void AShooterCharacter::SpawnDefaultFirearm_Internal()
-{
-	if (!DefaultFirearmClass || !GetMesh())
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	// Spawn params like the BP graph: owner = self, instigator = controller pawn
-	FActorSpawnParameters Params;
-	Params.Owner = this;
-	Params.Instigator = GetInstigator();
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	// We do not care about the initial transform since we snap to socket
-	const FTransform SpawnTM = FTransform::Identity;
-
-	AActor* NewFirearm = World->SpawnActor<AActor>(DefaultFirearmClass, SpawnTM, Params);
-	if (!NewFirearm)
-	{
-		return;
-	}
-
-	// Attach to character mesh at socket, snap all, weld simulated bodies like the BP node
-	const FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, true);
-	NewFirearm->AttachToComponent(GetMesh(), AttachRules, FirearmAttachSocket);
-
-	// Keep optional local pointer
-	SpawnedFirearm = NewFirearm;
-
-	// Inform SKG component so procedurals/aiming can initialize and replicate to clients
-	if (SKGShooterPawn)
-	{
-		SKGShooterPawn->SetHeldActor(NewFirearm);
-
-		// --- Tell the firearm who its pawn is for recoil / procedurals ---
-		if (AShooterFirearm* Firearm = Cast<AShooterFirearm>(NewFirearm))
-		{
-			Firearm->SetShooterPawn(SKGShooterPawn);
-		}
 	}
 }
 

@@ -45,13 +45,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Shooter|Camera")
 	bool IsUsingThirdPersonCamera() const { return bUseThirdPersonCamera; }
 
-	// --- Firearm ---
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Firearm")
-	void SpawnDefaultFirearm();
-
-	UFUNCTION(BlueprintPure, Category = "Shooter|Firearm")
-	AShooterWeaponBase* GetEquippedWeapon() const;
-
 	FORCEINLINE USKGShooterPawnComponent* GetShooterPawnComponent() const { return SKGShooterPawn; }
 
 	// --- Dash API ---
@@ -82,6 +75,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_PlayerState() override;
+	virtual void SpawnDefaultWeapon_Internal() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// --- Abilities ---
@@ -123,21 +117,6 @@ protected:
 	FTimerHandle DashRechargeTimer;
 	void DashRechargeTick_PerCharge();
 	void OnRefillAllTimer();
-
-	// --- Firearm ---
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
-	TSubclassOf<AActor> DefaultFirearmClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
-	FName FirearmAttachSocket = TEXT("ik_hand_gun");
-
-	UPROPERTY(Transient)
-	TObjectPtr<AActor> SpawnedFirearm;
-
-	UFUNCTION(Server, Reliable)
-	void Server_SpawnDefaultFirearm();
-
-	void SpawnDefaultFirearm_Internal();
 
 	// --- SKG ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|SKG")

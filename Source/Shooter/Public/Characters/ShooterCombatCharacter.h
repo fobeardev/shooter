@@ -8,6 +8,7 @@
 
 class UAbilitySystemComponent;
 class UAttrSet_Combat;
+class AShooterWeaponBase;
 
 /**
  * Base combat character class shared by player and AI.
@@ -41,6 +42,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	virtual void OnOutOfHealth();
 
+	// Weapons / Attacks
+	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
+	AShooterWeaponBase* GetEquippedWeapon() const { return EquippedWeapon; }
+
+	UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
+	void SpawnDefaultWeapon();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -62,4 +70,19 @@ protected:
 	bool bIsDead = false;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// --- Weapons ---
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Weapon")
+	TSubclassOf<AShooterWeaponBase> DefaultWeaponClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Weapon")
+	FName WeaponAttachSocket = TEXT("ik_hand_gun");
+
+	UPROPERTY(Transient)
+	TObjectPtr<AShooterWeaponBase> EquippedWeapon = nullptr;
+
+	UFUNCTION(Server, Reliable)
+	void Server_SpawnDefaultWeapon();
+
+	virtual void SpawnDefaultWeapon_Internal();   // shared spawn/attach
 };
