@@ -20,6 +20,7 @@
 #include "Tags/ShooterGameplayTags.h"
 #include "Game/ShooterGameMode.h"
 #include <Kismet/GameplayStatics.h>
+#include "Firearms/ShooterFirearm.h"
 
 AShooterCharacter::AShooterCharacter()
 {
@@ -177,6 +178,21 @@ void AShooterCharacter::OnRep_PlayerState()
 	ConfigureCameraDefaultsOnce();
 	ApplyCameraMode();
 	UpdateControllerPitchClamp();
+}
+
+void AShooterCharacter::SpawnDefaultWeapon_Internal()
+{
+	Super::SpawnDefaultWeapon_Internal();
+
+	if (SKGShooterPawn && EquippedWeapon)
+	{
+		SKGShooterPawn->SetHeldActor(EquippedWeapon);
+
+		if (AShooterFirearm* Firearm = Cast<AShooterFirearm>(EquippedWeapon))
+		{
+			Firearm->SetShooterPawn(SKGShooterPawn);
+		}
+	}
 }
 
 void AShooterCharacter::Input_Look(const FVector2D& LookAxis)

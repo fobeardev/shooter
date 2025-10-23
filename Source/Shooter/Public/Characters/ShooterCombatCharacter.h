@@ -84,5 +84,5 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void Server_SpawnDefaultWeapon();
 
-	void SpawnDefaultWeapon_Internal();   // shared spawn/attach
+	virtual void SpawnDefaultWeapon_Internal();   // shared spawn/attach
 };

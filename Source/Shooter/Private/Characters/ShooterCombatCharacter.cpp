@@ -134,10 +134,39 @@ void AShooterCombatCharacter::Server_SpawnDefaultWeapon_Implementation()
 	SpawnDefaultWeapon_Internal();
 }
 
+//void AShooterCombatCharacter::SpawnDefaultWeapon_Internal()
+//{
+//	if (!DefaultWeaponClass || !GetMesh()) return;
+//	UWorld* World = GetWorld(); if (!World) return;
+//
+//	FActorSpawnParameters P;
+//	P.Owner = this;
+//	P.Instigator = GetInstigator();
+//	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+//
+//	AShooterWeaponBase* NewWeapon = World->SpawnActor<AShooterWeaponBase>(DefaultWeaponClass, FTransform::Identity, P);
+//	if (!NewWeapon) return;
+//
+//	const FAttachmentTransformRules Rules(EAttachmentRule::SnapToTarget, true);
+//	NewWeapon->AttachToComponent(GetMesh(), Rules, WeaponAttachSocket);
+//    
+//	EquippedWeapon = NewWeapon;
+//}
+
 void AShooterCombatCharacter::SpawnDefaultWeapon_Internal()
 {
-	if (!DefaultWeaponClass || !GetMesh()) return;
-	UWorld* World = GetWorld(); if (!World) return;
+	if (!DefaultWeaponClass || !GetMesh())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SpawnDefaultWeapon_Internal] Missing DefaultWeaponClass or Mesh on %s"), *GetName());
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SpawnDefaultWeapon_Internal] No valid World for %s"), *GetName());
+		return;
+	}
 
 	FActorSpawnParameters P;
 	P.Owner = this;
@@ -145,12 +174,49 @@ void AShooterCombatCharacter::SpawnDefaultWeapon_Internal()
 	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	AShooterWeaponBase* NewWeapon = World->SpawnActor<AShooterWeaponBase>(DefaultWeaponClass, FTransform::Identity, P);
-	if (!NewWeapon) return;
+	if (!NewWeapon)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SpawnDefaultWeapon_Internal] Failed to spawn weapon for %s"), *GetName());
+		return;
+	}
 
 	const FAttachmentTransformRules Rules(EAttachmentRule::SnapToTarget, true);
 	NewWeapon->AttachToComponent(GetMesh(), Rules, WeaponAttachSocket);
-    
+
 	EquippedWeapon = NewWeapon;
+
+	// Debug log chain
+	UE_LOG(LogTemp, Warning, TEXT("[SpawnDefaultWeapon_Internal] %s spawned %s and attached to socket '%s'"),
+		*GetNameSafe(this),
+		*GetNameSafe(NewWeapon),
+		*WeaponAttachSocket.ToString());
+
+	// Check attachment validity
+	if (NewWeapon->GetAttachParentActor())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SpawnDefaultWeapon_Internal] Weapon %s is attached to actor %s"),
+			*GetNameSafe(NewWeapon),
+			*GetNameSafe(NewWeapon->GetAttachParentActor()));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SpawnDefaultWeapon_Internal] Weapon %s is NOT attached to any actor"), *GetNameSafe(NewWeapon));
+	}
+
+	// Optional: confirm mesh bone/socket existence
+	if (!GetMesh()->DoesSocketExist(WeaponAttachSocket))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[SpawnDefaultWeapon_Internal] Socket '%s' not found on mesh %s for %s"),
+			*WeaponAttachSocket.ToString(),
+			*GetNameSafe(GetMesh()),
+			*GetName());
+	}
+
+	// Optional: ensure transform correctness
+	FTransform SocketTransform = GetMesh()->GetSocketTransform(WeaponAttachSocket);
+	UE_LOG(LogTemp, Warning, TEXT("[SpawnDefaultWeapon_Internal] Socket location (%.1f, %.1f, %.1f) rotation (%.1f, %.1f, %.1f)"),
+		SocketTransform.GetLocation().X, SocketTransform.GetLocation().Y, SocketTransform.GetLocation().Z,
+		SocketTransform.Rotator().Pitch, SocketTransform.Rotator().Yaw, SocketTransform.Rotator().Roll);
 }
 
 void AShooterCombatCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
