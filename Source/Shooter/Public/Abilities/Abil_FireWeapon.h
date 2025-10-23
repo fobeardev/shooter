@@ -5,7 +5,7 @@
 #include "Abil_FireWeapon.generated.h"
 
 class AShooterCharacter;
-class AShooterFirearm;
+class AShooterWeaponBase;
 
 /**
  * GAS ability that handles weapon firing logic.
@@ -43,10 +43,7 @@ public:
 		bool bWasCancelled) override;
 
 protected:
-	/** Cached weapon reference for duration of activation */
+	
 	UPROPERTY()
-	TObjectPtr<AShooterFirearm> ActiveFirearm = nullptr;
-
-	/** Internal helper for firing logic */
-	void HandleFire(AShooterCharacter* ShooterChar);
+	TObjectPtr<class AShooterWeaponBase> ActiveWeapon;
 };

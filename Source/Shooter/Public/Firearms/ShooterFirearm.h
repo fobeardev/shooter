@@ -38,7 +38,6 @@ public:
 	virtual void StopFire() override;
 
 	// WeaponBase contracts
-	virtual USkeletalMeshComponent* GetWeaponMesh() const override;
 	virtual bool CanPerformAction() const override;
 
 protected:
@@ -57,8 +56,6 @@ protected:
 	// ------------------------------
 	// SKG Components (keep these exact)
 	// ------------------------------
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
-	TObjectPtr<USkeletalMeshComponent> FirearmMeshComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
 	TObjectPtr<USKGFirearmComponent> FirearmComponent;

@@ -12,6 +12,14 @@
 UCLASS()
 class SHOOTER_API AShooterAICharacter : public AShooterCombatCharacter
 {
-	GENERATED_BODY()
-	
+    GENERATED_BODY()
+
+public:
+	AShooterAICharacter();
+
+	/** Tag identifying the AI archetype (e.g. Enemy.Type.Charger / Enemy.Type.Marksman). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI")
+	FGameplayTag ArchetypeTag;
+protected:
+    virtual void BeginPlay() override;
 };

@@ -10,4 +10,7 @@ namespace ShooterTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Reload);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Damage_Hit);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Damage_Death);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Enemy_Flank);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Enemy_Retreat);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Combat_MeleeHit);
 }

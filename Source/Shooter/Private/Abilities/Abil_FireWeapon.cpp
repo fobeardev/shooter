@@ -1,6 +1,6 @@
 #include "Abilities/Abil_FireWeapon.h"
 #include "Characters/ShooterCharacter.h"
-#include "Firearms/ShooterFirearm.h"
+#include "Weapons/ShooterWeaponBase.h"
 #include "AbilitySystemComponent.h"
 #include "Tags/ShooterGameplayTags.h"
 
@@ -28,38 +28,25 @@ void UAbil_FireWeapon::ActivateAbility(
 		return;
 	}
 
-	AShooterCharacter* ShooterChar = Cast<AShooterCharacter>(ActorInfo->AvatarActor.Get());
-	if (!ShooterChar)
+	// Works for both player and AI
+	AShooterCombatCharacter* CombatChar = Cast<AShooterCombatCharacter>(ActorInfo->AvatarActor.Get());
+	if (!CombatChar)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
-	// Get equipped firearm (your AShooterFirearm)
-	AShooterFirearm* Firearm = Cast<AShooterFirearm>(ShooterChar->GetEquippedWeapon());
+	AShooterWeaponBase* Weapon = CombatChar->GetEquippedWeapon();
+	UE_LOG(LogTemp, Warning, TEXT("[FireAbility] Weapon=%s (Owner=%s)"), *GetNameSafe(Weapon), *GetNameSafe(CombatChar));
 
-	UE_LOG(LogTemp, Warning, TEXT("[FireAbility] Firearm=%s"), *GetNameSafe(Firearm));
-
-	if (!Firearm)
+	if (!Weapon)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
-	ActiveFirearm = Firearm;
-	HandleFire(ShooterChar);
-}
-
-void UAbil_FireWeapon::HandleFire(AShooterCharacter* ShooterChar)
-{
-	if (!ActiveFirearm)
-		return;
-
-	// Local prediction call (client + server)
-	ActiveFirearm->Fire();
-
-	// If the firearm is full-auto, BeginAutoIfNeeded() runs inside Fire()
-	// Burst/auto behavior already handled internally.
+	ActiveWeapon = Weapon;
+	ActiveWeapon->Fire();
 }
 
 void UAbil_FireWeapon::InputReleased(
@@ -67,9 +54,9 @@ void UAbil_FireWeapon::InputReleased(
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo)
 {
-	if (ActiveFirearm)
+	if (ActiveWeapon)
 	{
-		ActiveFirearm->StopFire();
+		ActiveWeapon->StopFire();
 	}
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, false, false);
@@ -82,10 +69,10 @@ void UAbil_FireWeapon::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	if (ActiveFirearm)
+	if (ActiveWeapon)
 	{
-		ActiveFirearm->StopFire();
-		ActiveFirearm = nullptr;
+		ActiveWeapon->StopFire();
+		ActiveWeapon = nullptr;
 	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);

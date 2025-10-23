@@ -40,22 +40,11 @@ AShooterFirearm::AShooterFirearm()
 	SetReplicateMovement(true);
 
 	// --- Components (unchanged order/roles) ---
-	FirearmMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirearmMeshComponent"));
-	RootComponent = FirearmMeshComponent;
-
 	FirearmComponent = CreateDefaultSubobject<USKGFirearmComponent>(TEXT("FirearmComponent"));
 	AttachmentManagerComponent = CreateDefaultSubobject<USKGAttachmentManagerComponent>(TEXT("AttachmentManagerComponent"));
 	ProceduralAnimComponent = CreateDefaultSubobject<USKGProceduralAnimComponent>(TEXT("ProceduralAnimComponent"));
 	MuzzleComponent = CreateDefaultSubobject<USKGMuzzleComponent>(TEXT("MuzzleComponent"));
 	OffhandIKComponent = CreateDefaultSubobject<USKGOffhandIKComponent>(TEXT("OffhandIKComponent"));
-
-	// SKG init style (manual name wiring; we’ll init in BeginPlay)
-	if (FirearmComponent)
-	{
-		FirearmComponent->bAutoInitialize = false;
-		FirearmComponent->SetFirearmMeshComponentName(FirearmMeshComponent->GetFName());
-		FirearmComponent->SetAttachmentManagerComponentName(AttachmentManagerComponent->GetFName());
-	}
 
 	if (ProceduralAnimComponent)
 	{
@@ -73,19 +62,18 @@ void AShooterFirearm::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Resolve & initialize SKG internals
 	if (ensure(FirearmComponent))
 	{
 		// Make sure the names are correct (safety if someone renames components)
-		FirearmComponent->SetFirearmMeshComponentName(FirearmMeshComponent->GetFName());
+		FirearmComponent->SetFirearmMeshComponentName(WeaponMeshComponent->GetFName());
 		FirearmComponent->SetAttachmentManagerComponentName(
 			AttachmentManagerComponent ? AttachmentManagerComponent->GetFName() : NAME_None);
 		FirearmComponent->InitializeFirearmComponent();
 	}
 
-	if (FirearmMeshComponent)
+	if (WeaponMeshComponent)
 	{
-		FirearmMeshComponent->SetComponentTickEnabled(false);
+		WeaponMeshComponent->SetComponentTickEnabled(false);
 	}
 }
 
@@ -96,11 +84,6 @@ void AShooterFirearm::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 }
 
 // ===== WeaponBase contracts =====
-
-USkeletalMeshComponent* AShooterFirearm::GetWeaponMesh() const
-{
-	return FirearmMeshComponent;
-}
 
 bool AShooterFirearm::CanPerformAction() const
 {

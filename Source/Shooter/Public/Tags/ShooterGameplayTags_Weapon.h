@@ -13,6 +13,7 @@ namespace ShooterTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Class_LMG);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Class_Rocket);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Class_Railgun);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Class_Sword);
 
 	// Fire modes
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_FireMode_Semi);

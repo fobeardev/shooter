@@ -10,6 +10,7 @@
 #include "GameplayTagsManager.h"
 #include "GameFramework/Actor.h"
 #include "Net/UnrealNetwork.h"
+#include "Weapons/ShooterWeaponBase.h"
 
 AShooterCombatCharacter::AShooterCombatCharacter()
 {
@@ -32,16 +33,25 @@ void AShooterCombatCharacter::BeginPlay()
 		ASC->InitAbilityActorInfo(this, this);
 
 		// --- Force-register our default subobject attribute set
-		if (CombatAttributes && !ASC->GetSpawnedAttributes_Mutable().Contains(CombatAttributes))
+		if (CombatAttributes)
 		{
-			ASC->GetSpawnedAttributes_Mutable().Add(CombatAttributes);
+			ASC->AddSpawnedAttribute(CombatAttributes);
 		}
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[ASC] Registered attribute sets for %s:"), *GetNameSafe(this));
-	for (UAttributeSet* Set : ASC->GetSpawnedAttributes_Mutable())
+
+	TArray<UAttributeSet*> AttributeSets = ASC->GetSpawnedAttributes();
+
+	for (UAttributeSet* Set : AttributeSets)
 	{
 		UE_LOG(LogTemp, Log, TEXT(" - %s"), *Set->GetClass()->GetName());
+	}
+
+	if (HasAuthority() && DefaultWeaponClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnDefaultWeapon called for %s"), *GetName());
+		SpawnDefaultWeapon();
 	}
 }
 
@@ -105,6 +115,42 @@ void AShooterCombatCharacter::OnRep_Death()
 	{
 		HandleDeath();
 	}
+}
+
+void AShooterCombatCharacter::SpawnDefaultWeapon()
+{
+	if (HasAuthority()) 
+	{ 
+		SpawnDefaultWeapon_Internal(); 
+	}
+	else 
+	{ 
+		Server_SpawnDefaultWeapon(); 
+	}
+}
+
+void AShooterCombatCharacter::Server_SpawnDefaultWeapon_Implementation()
+{
+	SpawnDefaultWeapon_Internal();
+}
+
+void AShooterCombatCharacter::SpawnDefaultWeapon_Internal()
+{
+	if (!DefaultWeaponClass || !GetMesh()) return;
+	UWorld* World = GetWorld(); if (!World) return;
+
+	FActorSpawnParameters P;
+	P.Owner = this;
+	P.Instigator = GetInstigator();
+	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AShooterWeaponBase* NewWeapon = World->SpawnActor<AShooterWeaponBase>(DefaultWeaponClass, FTransform::Identity, P);
+	if (!NewWeapon) return;
+
+	const FAttachmentTransformRules Rules(EAttachmentRule::SnapToTarget, true);
+	NewWeapon->AttachToComponent(GetMesh(), Rules, WeaponAttachSocket);
+    
+	EquippedWeapon = NewWeapon;
 }
 
 void AShooterCombatCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
