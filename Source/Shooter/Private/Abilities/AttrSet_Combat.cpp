@@ -58,8 +58,11 @@ void UAttrSet_Combat::PostGameplayEffectExecute(const FGameplayEffectModCallback
 		{
 			if (AShooterCombatCharacter* OwnerChar = Cast<AShooterCombatCharacter>(GetOwningActor()))
 			{
-				UE_LOG(LogTemp, Warning, TEXT("%s has died."), *OwnerChar->GetName());
-				OwnerChar->OnOutOfHealth();
+				if (!OwnerChar->IsDead()) // prevent multiple death calls
+				{
+					UE_LOG(LogTemp, Warning, TEXT("%s has died."), *OwnerChar->GetName());
+					OwnerChar->OnOutOfHealth();
+				}
 			}
 		}
 	}

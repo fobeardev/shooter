@@ -72,7 +72,7 @@ float AShooterCombatCharacter::GetMaxHealth() const
 
 bool AShooterCombatCharacter::IsDead() const
 {
-	return bIsDead || (GetHealth() <= 0.f);
+	return bIsDead;
 }
 
 void AShooterCombatCharacter::OnOutOfHealth()
@@ -106,7 +106,57 @@ void AShooterCombatCharacter::HandleHealthChanged(float NewHealth, float MaxHeal
 
 void AShooterCombatCharacter::HandleDeath()
 {
-	SetLifeSpan(5.f);
+	UE_LOG(LogTemp, Warning, TEXT("[AI] HandleDeath() triggered for %s"), *GetNameSafe(this));
+
+	// 1. Stop movement & disable input
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->DisableMovement();
+	}
+
+	DisableInput(nullptr);
+
+	// 2. Stop abilities
+	if (ASC)
+	{
+		ASC->CancelAllAbilities();
+	}
+
+	// 3. Switch to ragdoll physics on the mesh
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetCollisionProfileName(TEXT("Ragdoll"));
+		MeshComp->SetSimulatePhysics(true);
+		MeshComp->WakeAllRigidBodies();
+		MeshComp->bBlendPhysics = true;
+	}
+
+	// 4. Disable capsule collision so the body doesn't pop up
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// 5. Play optional death cue or VFX
+	if (ASC)
+	{
+		FGameplayTag DeathCue = FGameplayTag::RequestGameplayTag(FName("GameplayCue.Damage.Death"));
+		ASC->ExecuteGameplayCue(DeathCue);
+	}
+
+	// 6. Schedule cleanup (destroy) after a few seconds
+	const float CorpseLifetime = 8.0f;
+	FTimerHandle CleanupHandle;
+	GetWorldTimerManager().SetTimer(
+		CleanupHandle,
+		[this]()
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[AI] Destroying ragdoll corpse: %s"), *GetNameSafe(this));
+			Destroy();
+		},
+		CorpseLifetime,
+		false
+	);
 }
 
 void AShooterCombatCharacter::OnRep_Death()

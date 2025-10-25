@@ -5,8 +5,9 @@
 #include "Actors/SKGBaseActor.h"                // SKG base
 #include "ShooterWeaponBase.generated.h"
 
-class USkeletalMeshComponent;
+class UMeshComponent;
 class USKGShooterPawnComponent;
+class USKGProceduralAnimComponent;
 
 /**
  * Shared parent for all weapons (firearms, melee, energy).
@@ -41,7 +42,7 @@ public:
 
 	/** The primary mesh of this weapon (child overrides if needed). */
 	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
-	virtual USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMeshComponent; }
+	virtual UMeshComponent* GetWeaponMesh() const;
 
 	/** Current fire mode (replicated). */
 	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
@@ -56,8 +57,11 @@ protected:
 
 protected:
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
-	TObjectPtr<USkeletalMeshComponent> WeaponMeshComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon")
+	TObjectPtr<UMeshComponent> WeaponMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon")
+	TObjectPtr<USKGProceduralAnimComponent> ProceduralAnimComponent;
 
 	// Owner shooter pawn component (cached; NOT replicated)
 	UPROPERTY()

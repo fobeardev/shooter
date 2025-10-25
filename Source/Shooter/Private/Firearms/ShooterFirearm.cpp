@@ -32,6 +32,7 @@
 // Tags
 #include "Tags/ShooterGameplayTags.h"
 #include <AbilitySystemGlobals.h>
+#include <Characters/ShooterCombatCharacter.h>
 
 AShooterFirearm::AShooterFirearm()
 {
@@ -42,20 +43,23 @@ AShooterFirearm::AShooterFirearm()
 	// --- Components (unchanged order/roles) ---
 	FirearmComponent = CreateDefaultSubobject<USKGFirearmComponent>(TEXT("FirearmComponent"));
 	AttachmentManagerComponent = CreateDefaultSubobject<USKGAttachmentManagerComponent>(TEXT("AttachmentManagerComponent"));
-	ProceduralAnimComponent = CreateDefaultSubobject<USKGProceduralAnimComponent>(TEXT("ProceduralAnimComponent"));
 	MuzzleComponent = CreateDefaultSubobject<USKGMuzzleComponent>(TEXT("MuzzleComponent"));
 	OffhandIKComponent = CreateDefaultSubobject<USKGOffhandIKComponent>(TEXT("OffhandIKComponent"));
-
-	if (ProceduralAnimComponent)
-	{
-		ProceduralAnimComponent->bAutoInitialize = true;
-		ProceduralAnimComponent->bOverrideComponentNames = false;
-	}
 
 	// Default tags for this firearm (can be overridden in BP)
 	WeaponClassTag = ShooterTags::Weapon_Class_AR;
 	DamageTypeTag = ShooterTags::Damage_Ballistic;
 	CurrentFireModeTag = ShooterTags::Weapon_FireMode_Semi;
+
+	WeaponMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("WeaponMesh"));
+	RootComponent = WeaponMeshComponent;
+
+	if (WeaponMeshComponent)
+	{
+		WeaponMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WeaponMeshComponent->SetGenerateOverlapEvents(false);
+		WeaponMeshComponent->SetIsReplicated(true);
+	}
 }
 
 void AShooterFirearm::BeginPlay()
@@ -74,6 +78,12 @@ void AShooterFirearm::BeginPlay()
 	if (WeaponMeshComponent)
 	{
 		WeaponMeshComponent->SetComponentTickEnabled(false);
+	}
+
+	if (ProceduralAnimComponent)
+	{
+		ProceduralAnimComponent->SetProceduralMeshName(WeaponMeshComponent->GetFName());
+		ProceduralAnimComponent->InitializeProceduralAnimComponent();
 	}
 }
 
@@ -301,9 +311,19 @@ void AShooterFirearm::OnBulletHit_TB(const FTBImpactParams& Impact)
 	if (!HasAuthority())
 		return;
 
+
 	AActor* HitActor = Impact.HitResult.GetActor();
 	if (!HitActor || HitActor == this)
 		return;
+
+	if (AShooterCombatCharacter* TargetChar = Cast<AShooterCombatCharacter>(HitActor))
+	{
+		if (TargetChar->IsDead()) 
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[ShooterFirearm] TargetChar is already dead, from: %s"), *GetNameSafe(this));
+			return; // don't apply damage to dead bodies
+		}
+	}
 
 	// Source ASC (weapon owner) -> Target ASC (hit actor)
 	UAbilitySystemComponent* SourceASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
@@ -314,16 +334,36 @@ void AShooterFirearm::OnBulletHit_TB(const FTBImpactParams& Impact)
 		return;
 
 	// --- Compute basic ballistic energy scalar ---
+	UBulletDataAsset* Bullet = nullptr;
+
+	if (BulletDataAsset.IsValid())
+	{
+		Bullet = BulletDataAsset.Get();
+	}
+	else if (BulletDataAsset.ToSoftObjectPath().IsValid())
+	{
+		Bullet = BulletDataAsset.LoadSynchronous();
+	}
+
+	if (!Bullet)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ShooterFirearm] No BulletDataAsset set on %s"), *GetNameSafe(this));
+		return;
+	}
+
 	const float ImpactSpeed = Impact.ImpactVelocity.Size();
-	const float ImpactEnergy = ImpactSpeed * 0.1f; // Simple kinetic proxy
 
-	// You can later replace this with: 0.5f * Mass * V^2
+	// Approximate "gamey" kinetic energy model
+	const float MassKg = Bullet->BulletProperties.Mass; // 4 g 5.56 NATO
+	const float VelocityMS = Impact.ImpactVelocity.Size() / 100.f;
+	float KE = 0.5f * MassKg * FMath::Square(VelocityMS);
 
-	//const float MassKg = 0.02f;               // example bullet mass (20 grams)
-	//const float VelocityMS = Impact.ImpactVelocity.Size() / 100.0f; // convert cm/s to m/s
-	//const float ImpactEnergy = 0.5f * MassKg * FMath::Square(VelocityMS);
-
-	// but it is overkill for now (literally)
+	// Map real kinetic energy -> gameplay damage range
+	float ImpactEnergy = FMath::GetMappedRangeValueClamped(
+		FVector2D(0.f, 3500.f),   // realistic pistol -> rifle range in joules
+		FVector2D(10.f, 50.f),    // gameplay damage window
+		KE
+	);
 
 	// --- Load ballistic damage GE from soft reference ---
 	TSubclassOf<UGameplayEffect> DamageGE = DamageGameplayEffectClass.LoadSynchronous();

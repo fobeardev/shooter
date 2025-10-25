@@ -1,7 +1,7 @@
 #include "Weapons/ShooterWeaponBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Tags/ShooterGameplayTags.h"
-#include "Components/SkeletalMeshComponent.h"
+#include "Components/SKGProceduralAnimComponent.h"
 
 AShooterWeaponBase::AShooterWeaponBase()
 {
@@ -13,17 +13,24 @@ AShooterWeaponBase::AShooterWeaponBase()
 	DamageTypeTag = ShooterTags::Damage_Ballistic;				// default damage channel
 	CurrentFireModeTag = ShooterTags::Weapon_FireMode_Semi;		// default fire mode
 
-    WeaponMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("WeaponMesh"));
-    RootComponent = WeaponMeshComponent;
+    ProceduralAnimComponent = CreateDefaultSubobject<USKGProceduralAnimComponent>(TEXT("ProceduralAnimComponent"));
 
-    WeaponMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    WeaponMeshComponent->SetGenerateOverlapEvents(false);
-    WeaponMeshComponent->SetIsReplicated(true);
+    if (ProceduralAnimComponent)
+    {
+        // Don’t assume it’s initialized yet — just set trivial defaults.
+        ProceduralAnimComponent->bAutoInitialize = true;
+    }
 }
 
 void AShooterWeaponBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+    if (ProceduralAnimComponent && ProceduralAnimComponent->bAutoInitialize)
+    {
+        ProceduralAnimComponent->SetProceduralMeshName(TEXT("WeaponMesh"));
+        ProceduralAnimComponent->InitializeProceduralAnimComponent();
+    }
 }
 
 void AShooterWeaponBase::HandleFire_Internal() {}
@@ -69,11 +76,28 @@ bool AShooterWeaponBase::CanPerformAction() const
 	return !bIsReloading;
 }
 
+UMeshComponent* AShooterWeaponBase::GetWeaponMesh() const
+{
+    UMeshComponent* ResultMesh = nullptr;
+
+    if (ProceduralAnimComponent && ProceduralAnimComponent->GetProceduralAnimMesh())
+    {
+        ResultMesh = ProceduralAnimComponent->GetProceduralAnimMesh();
+    }
+    else
+    {
+        ResultMesh = WeaponMeshComponent.Get();
+    }
+
+    return ResultMesh;
+}
+
 void AShooterWeaponBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	FDoRepLifetimeParams Params; Params.bIsPushBased = true;
+	FDoRepLifetimeParams Params; 
+    Params.bIsPushBased = true;
 
 	DOREPLIFETIME_WITH_PARAMS_FAST(AShooterWeaponBase, CurrentFireModeTag, Params);
 	DOREPLIFETIME_WITH_PARAMS_FAST(AShooterWeaponBase, bIsReloading, Params);

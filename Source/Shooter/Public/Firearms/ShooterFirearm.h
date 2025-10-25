@@ -64,9 +64,6 @@ protected:
 	TObjectPtr<USKGAttachmentManagerComponent> AttachmentManagerComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
-	TObjectPtr<USKGProceduralAnimComponent> ProceduralAnimComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
 	TObjectPtr<USKGMuzzleComponent> MuzzleComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
