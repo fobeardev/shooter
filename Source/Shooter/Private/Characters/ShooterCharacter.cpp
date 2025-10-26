@@ -20,7 +20,7 @@
 #include "Tags/ShooterGameplayTags.h"
 #include "Game/ShooterGameMode.h"
 #include <Kismet/GameplayStatics.h>
-#include "Firearms/ShooterFirearm.h"
+#include "Weapons/Firearms/ShooterFirearm.h"
 
 AShooterCharacter::AShooterCharacter()
 {

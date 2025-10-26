@@ -1,4 +1,4 @@
-#include "Firearms/ShooterFirearm.h"
+#include "Weapons/Firearms/ShooterFirearm.h"
 
 // SKG
 #include "Components/SKGFirearmComponent.h"
