@@ -258,10 +258,19 @@ void UAbil_Dash::EndAbility(
         {
             if (UCharacterMovementComponent* Move = Char->GetCharacterMovement())
             {
-                if (SavedBrakingFriction >= 0.f) { Move->BrakingFrictionFactor = SavedBrakingFriction; UE_LOG(LogTemp, Warning, TEXT("Dash[Abil]: Restore BrakingFriction: %.2f"), SavedBrakingFriction); }
-                if (SavedFallingLateralFriction >= 0.f) { Move->FallingLateralFriction = SavedFallingLateralFriction; }
-                if (SavedBrakingDecelFalling >= 0.f) { Move->BrakingDecelerationFalling = SavedBrakingDecelFalling; }
-                if (SavedAirControl >= 0.f) { Move->AirControl = SavedAirControl; }
+                Move->FallingLateralFriction = SavedFallingLateralFriction >= 0.f ? SavedFallingLateralFriction : 0.f;
+                Move->BrakingDecelerationFalling = SavedBrakingDecelFalling >= 0.f ? SavedBrakingDecelFalling : 0.f;
+                Move->AirControl = SavedAirControl >= 0.f ? SavedAirControl : 0.6f;  // restore sensible default
+                Move->BrakingFrictionFactor = SavedBrakingFriction >= 0.f ? SavedBrakingFriction : 1.f;
+
+                Move->bOrientRotationToMovement = false;
+                Char->bUseControllerRotationYaw = true;
+
+                if (Move->MovementMode == MOVE_Falling)
+                {
+                    Move->FallingLateralFriction = 0.f;
+                    Move->BrakingDecelerationFalling = 0.f;
+                }
             }
 
             if (UWorld* World = Char->GetWorld())

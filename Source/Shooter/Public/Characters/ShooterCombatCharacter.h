@@ -6,6 +6,7 @@
 #include "GameplayTagContainer.h"
 #include "ShooterCombatCharacter.generated.h"
 
+class USKGShooterPawnComponent;
 class UAbilitySystemComponent;
 class UAttrSet_Combat;
 class AShooterWeaponBase;
@@ -24,6 +25,7 @@ class SHOOTER_API AShooterCombatCharacter : public ACharacter, public IAbilitySy
 
 public:
 	AShooterCombatCharacter();
+	AShooterCombatCharacter(const FObjectInitializer& ObjectInitializer);
 
 	// --- IAbilitySystemInterface ---
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
@@ -49,8 +51,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
 	void SpawnDefaultWeapon();
 
+	FORCEINLINE USKGShooterPawnComponent* GetShooterPawnComponent() const { return SKGShooterPawn; }
+
 protected:
 	virtual void BeginPlay() override;
+	void PossessedBy(AController* NewController) override;
 
 	// --- GAS Components ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|GAS")
@@ -58,6 +63,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|GAS")
 	TObjectPtr<UAttrSet_Combat> CombatAttributes;
+
+	// --- SKG ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|SKG")
+	TObjectPtr<USKGShooterPawnComponent> SKGShooterPawn;
 
 	// --- Internal: health monitoring ---
 	virtual void HandleHealthChanged(float NewHealth, float MaxHealth);

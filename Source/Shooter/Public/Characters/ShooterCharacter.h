@@ -9,7 +9,6 @@ class UGameplayAbility;
 class UGameplayEffect;
 class UCameraComponent;
 class USpringArmComponent;
-class USKGShooterPawnComponent;
 class AShooterWeaponBase;
 class AActor;
 struct FInputActionValue;
@@ -28,11 +27,13 @@ class SHOOTER_API AShooterCharacter : public AShooterCombatCharacter
 	GENERATED_BODY()
 
 public:
-	AShooterCharacter();
+	AShooterCharacter(const FObjectInitializer& ObjectInitializer);
 
 	// --- Input ---
 	void Input_Look(const FVector2D& LookAxis);
 	void Input_Move(const FVector2D& MoveAxis);
+	void Input_JumpStart();
+	void Input_JumpStop();
 	void Input_Dash();
 	void Input_Aim(const FInputActionValue& Value);
 	void Input_FirePressed();
@@ -44,8 +45,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Shooter|Camera")
 	bool IsUsingThirdPersonCamera() const { return bUseThirdPersonCamera; }
-
-	FORCEINLINE USKGShooterPawnComponent* GetShooterPawnComponent() const { return SKGShooterPawn; }
 
 	// --- Dash API ---
 	UFUNCTION(BlueprintPure, Category = "Shooter|Dash|Charges")
@@ -77,6 +76,7 @@ protected:
 	virtual void OnRep_PlayerState() override;
 	virtual void SpawnDefaultWeapon_Internal() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void Landed(const FHitResult& Hit) override;
 
 	// --- Abilities ---
 	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
@@ -117,10 +117,6 @@ protected:
 	FTimerHandle DashRechargeTimer;
 	void DashRechargeTick_PerCharge();
 	void OnRefillAllTimer();
-
-	// --- SKG ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|SKG")
-	TObjectPtr<USKGShooterPawnComponent> SKGShooterPawn;
 
 	// --- Camera ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")

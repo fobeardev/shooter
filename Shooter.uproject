@@ -12,7 +12,8 @@
 				"SKGShooterFrameworkActors",
 				"Engine",
 				"GameplayAbilities",
-				"AIModule"
+				"AIModule",
+				"SKGShooterFramework"
 			]
 		}
 	],

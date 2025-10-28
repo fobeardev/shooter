@@ -5,6 +5,7 @@
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "Characters/ShooterCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 AShooterPlayerController::AShooterPlayerController()
 {
@@ -17,6 +18,11 @@ void AShooterPlayerController::BeginPlay()
 
     FInputModeGameOnly Mode;
     SetInputMode(Mode);
+}
+
+void AShooterPlayerController::OnPossess(APawn* InPawn)
+{
+    Super::OnPossess(InPawn);
 
     if (ULocalPlayer* LP = GetLocalPlayer())
     {
@@ -90,13 +96,18 @@ void AShooterPlayerController::OnLook(const FInputActionValue& Value)
 void AShooterPlayerController::OnJumpStarted()
 {
     if (AShooterCharacter* C = Cast<AShooterCharacter>(GetPawn()))
-        C->Jump();
+    {
+        if (C->GetCharacterMovement() && C->GetCharacterMovement()->IsActive())
+        {
+            C->Input_JumpStart();
+        }
+    }
 }
 
 void AShooterPlayerController::OnJumpCanceled()
 {
     if (AShooterCharacter* C = Cast<AShooterCharacter>(GetPawn()))
-        C->StopJumping();
+        C->Input_JumpStop();
 }
 
 void AShooterPlayerController::OnDashPressed()

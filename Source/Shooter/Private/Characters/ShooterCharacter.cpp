@@ -7,13 +7,15 @@
 #include "Net/UnrealNetwork.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/PlayerController.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include <Components/SKGShooterPawnComponent.h>
 #include "Components/CapsuleComponent.h"
 #include "InputActionValue.h"
 #include "TimerManager.h"
+#include "DrawDebugHelpers.h"
+
+// SKG Shooter Framework
+#include <Components/SKGShooterPawnComponent.h>
 
 // Project
 #include "Abilities/AttrSet_Combat.h"
@@ -21,92 +23,75 @@
 #include "Game/ShooterGameMode.h"
 #include <Kismet/GameplayStatics.h>
 #include "Weapons/Firearms/ShooterFirearm.h"
+#include "Player/Components/ShooterCharacterMovement_Doom.h"
 
-AShooterCharacter::AShooterCharacter()
+AShooterCharacter::AShooterCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
-	PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = true;
 
-	bReplicates = true;
-	SetReplicateMovement(true);
-	SetNetUpdateFrequency(100.f);
-	SetMinNetUpdateFrequency(33.f);
+    bReplicates = true;
+    SetReplicateMovement(true);
+    SetNetUpdateFrequency(100.f);
+    SetMinNetUpdateFrequency(33.f);
 
-	// Ensure mesh is attached to capsule (typical Character already is, but explicit is fine)
-	GetMesh()->SetupAttachment(RootComponent);
+    // Ensure mesh is attached to capsule (typical Character already is)
+    GetMesh()->SetupAttachment(RootComponent);
+    GetMesh()->SetRelativeLocation(FVector(0.f, 0.f, -90.f));   // feet at capsule base
+    GetMesh()->SetRelativeRotation(FRotator(0.f, -90.f, 0.f));  // face +X
 
-	// Offset down so feet meet capsule base
-	GetMesh()->SetRelativeLocation(FVector(0.f, 0.f, -90.f));
+    // -----------------------------
+    // Third-person spring arm + camera
+    // -----------------------------
+    ThirdPersonBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonBoom"));
+    ThirdPersonBoom->SetupAttachment(RootComponent);
+    ThirdPersonBoom->TargetArmLength = ThirdPersonTargetArm;
+    ThirdPersonBoom->SetRelativeLocation(ThirdPersonBoomOffset);
+    ThirdPersonBoom->bUsePawnControlRotation = true;
+    ThirdPersonBoom->bEnableCameraLag = bThirdPersonLag;
+    ThirdPersonBoom->CameraLagSpeed = ThirdPersonLagSpeed;
+    ThirdPersonBoom->CameraLagMaxDistance = ThirdPersonLagMaxDist;
+    ThirdPersonBoom->bInheritPitch = true;
+    ThirdPersonBoom->bInheritYaw = true;
+    ThirdPersonBoom->bInheritRoll = false;
 
-	// Rotate mesh to face +X forward (typical if model faces +Y)
-	GetMesh()->SetRelativeRotation(FRotator(0.f, -90.f, 0.f));
+    ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));
+    ThirdPersonCamera->SetupAttachment(ThirdPersonBoom, USpringArmComponent::SocketName);
+    ThirdPersonCamera->SetRelativeRotation(ThirdPersonCameraRelativeRot);
+    ThirdPersonCamera->bUsePawnControlRotation = false;
+    ThirdPersonCamera->FieldOfView = ThirdPersonFOV;
+    ThirdPersonCamera->SetAutoActivate(false);
 
-	// SKG Shooter Framework pawn component
-	SKGShooterPawn = CreateDefaultSubobject<USKGShooterPawnComponent>(TEXT("SKGShooterPawn"));
+    // -----------------------------
+    // First-person camera
+    // -----------------------------
+    FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
+    FirstPersonCamera->SetupAttachment(GetMesh(), FirstPersonCameraSocket);
+    FirstPersonCamera->bUsePawnControlRotation = true;  // camera follows controller pitch/yaw
+    FirstPersonCamera->FieldOfView = FirstPersonFOV;
 
-	// Third person boom
-	ThirdPersonBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("ThirdPersonBoom"));
-	ThirdPersonBoom->SetupAttachment(RootComponent);
-	ThirdPersonBoom->TargetArmLength = ThirdPersonTargetArm;       // 300
-	ThirdPersonBoom->SetRelativeLocation(ThirdPersonBoomOffset);   // (0,50,70)
-	ThirdPersonBoom->bUsePawnControlRotation = true;
-	ThirdPersonBoom->bEnableCameraLag = bThirdPersonLag;           // true
-	ThirdPersonBoom->CameraLagSpeed = ThirdPersonLagSpeed;         // 12
-	ThirdPersonBoom->CameraLagMaxDistance = ThirdPersonLagMaxDist; // 40
-	ThirdPersonBoom->bInheritPitch = true;
-	ThirdPersonBoom->bInheritYaw = true;
-	ThirdPersonBoom->bInheritRoll = false;
+    // -----------------------------
+    // Controller rotation flags
+    // -----------------------------
+    bUseControllerRotationYaw = true;    // character faces aim direction
+    bUseControllerRotationPitch = false; // camera handles pitch independently
+    bUseControllerRotationRoll = false;
 
-	// Third person camera
-	ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));
-	ThirdPersonCamera->SetupAttachment(ThirdPersonBoom, USpringArmComponent::SocketName);
-	ThirdPersonCamera->SetRelativeRotation(ThirdPersonCameraRelativeRot); // (0,-10,0)
-	ThirdPersonCamera->bUsePawnControlRotation = false;
-	ThirdPersonCamera->FieldOfView = ThirdPersonFOV;
-	ThirdPersonCamera->SetAutoActivate(false);
+    // -----------------------------
+    // Dash setup
+    // -----------------------------
+    MaxDashCharges = 2;
+    CurrentDashCharges = MaxDashCharges;
+    Rep_CurrentDashCharges = CurrentDashCharges;
 
-	// First person camera attached to head socket
-	FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
-	FirstPersonCamera->SetupAttachment(GetMesh(), FirstPersonCameraSocket); // "S_Camera" by default
-	FirstPersonCamera->bUsePawnControlRotation = true;
-	FirstPersonCamera->FieldOfView = FirstPersonFOV;
+    bRefillAllAtOnce = true;
+    RefillAllDelay = 0.80f;
+    DashRechargeDelay = 1.0f;
 
-	// Movement orientation: aim with controller in FP; keep movement-driven yaw off
-	if (UCharacterMovementComponent* Move = GetCharacterMovement())
-	{
-		Move->MaxWalkSpeed = 600.f;
-		Move->MaxAcceleration = 2048.f;
-		Move->BrakingDecelerationWalking = 2048.f;
-		Move->GroundFriction = 8.f;
+    // Default to first-person mode
+    bUseThirdPersonCamera = false;
 
-		Move->JumpZVelocity = 600.f;
-		Move->GravityScale = 1.3f;
-		Move->AirControl = 0.45f;
-		Move->AirControlBoostMultiplier = 1.0f;
-		Move->AirControlBoostVelocityThreshold = 0.f;
-
-		Move->FallingLateralFriction = 0.8f;
-		Move->BrakingDecelerationFalling = 800.f;
-
-		Move->bOrientRotationToMovement = false;
-		bUseControllerRotationYaw = true;
-		bUseControllerRotationPitch = false; // FP camera handles pitch
-		bUseControllerRotationRoll = false;
-	}
-
-	// Charges defaults
-	MaxDashCharges = 2;
-	CurrentDashCharges = MaxDashCharges;
-	Rep_CurrentDashCharges = CurrentDashCharges;
-
-	// Recharge defaults
-	bRefillAllAtOnce = true;
-	RefillAllDelay = 0.80f;   // Hades-like
-	DashRechargeDelay = 1.0f; // used only if bRefillAllAtOnce is false
-
-	// Default to FP camera at spawn
-	bUseThirdPersonCamera = false;
-
-	UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: Ctor: Max=%d Curr=%d Delay=%.2f"), MaxDashCharges, CurrentDashCharges, DashRechargeDelay);
+    UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: Ctor: Max=%d Curr=%d Delay=%.2f"), MaxDashCharges, CurrentDashCharges, DashRechargeDelay);
 }
 
 void AShooterCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -132,21 +117,32 @@ void AShooterCharacter::BeginPlay()
 	CurrentDashCharges = FMath::Clamp(CurrentDashCharges, 0, MaxDashCharges);
 	UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: BeginPlay: Curr=%d/%d"), CurrentDashCharges, MaxDashCharges);
 
-	if (ASC && GetLocalRole() == ROLE_Authority)
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
-		InitializeASC();
-		// Grant in PossessedBy only (avoid double grant)
+		UE_LOG(LogTemp, Warning, TEXT("MoveComp: %s UpdatedComponent=%s PawnOwner=%s"),
+			*Move->GetName(),
+			*GetNameSafe(Move->UpdatedComponent),
+			*GetNameSafe(Move->GetPawnOwner()));
 	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("GetCharacterMovement() returned NULL"));
+	}
+
 }
 
 void AShooterCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
-	if (ASC && GetLocalRole() == ROLE_Authority)
+	if (ASC)
 	{
 		InitializeASC();
-		GrantStartupAbilities();
+
+		if (GetLocalRole() == ROLE_Authority)
+		{
+			GrantStartupAbilities();
+		}
 	}
 
 	if (HasAuthority())
@@ -174,7 +170,17 @@ void AShooterCharacter::PossessedBy(AController* NewController)
 void AShooterCharacter::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
-	if (ASC) { ASC->InitAbilityActorInfo(this, this); }
+
+	if (ASC)
+	{
+		ASC->InitAbilityActorInfo(this, this);
+
+		if (CombatAttributes && !ASC->GetSpawnedAttributes().Contains(CombatAttributes))
+		{
+			ASC->AddSpawnedAttribute(CombatAttributes);
+		}
+	}
+
 	ConfigureCameraDefaultsOnce();
 	ApplyCameraMode();
 	UpdateControllerPitchClamp();
@@ -183,16 +189,6 @@ void AShooterCharacter::OnRep_PlayerState()
 void AShooterCharacter::SpawnDefaultWeapon_Internal()
 {
 	Super::SpawnDefaultWeapon_Internal();
-
-	if (SKGShooterPawn && EquippedWeapon)
-	{
-		SKGShooterPawn->SetHeldActor(EquippedWeapon);
-
-		if (AShooterFirearm* Firearm = Cast<AShooterFirearm>(EquippedWeapon))
-		{
-			Firearm->SetShooterPawn(SKGShooterPawn);
-		}
-	}
 }
 
 void AShooterCharacter::Input_Look(const FVector2D& LookAxis)
@@ -203,31 +199,119 @@ void AShooterCharacter::Input_Look(const FVector2D& LookAxis)
 	AddControllerPitchInput(LookAxis.Y * MousePitchSensitivity * DT * 100.f);
 }
 
+static void DebugDrawBasis(UWorld* World, const FVector& Origin, const FVector& Fwd2D, const FVector& Right2D, FColor C = FColor::Cyan)
+{
+	const float Len = 100.f;
+	DrawDebugDirectionalArrow(World, Origin, Origin + Fwd2D * Len, 16.f, FColor::Green, false, 0.1f, 0, 1.5f);
+	DrawDebugDirectionalArrow(World, Origin, Origin + Right2D * Len, 16.f, FColor::Blue, false, 0.1f, 0, 1.5f);
+	DrawDebugSphere(World, Origin, 4.f, 8, C, false, 0.1f);
+}
+
 void AShooterCharacter::Input_Move(const FVector2D& MoveAxis)
 {
 	if (!Controller) return;
-	const FRotator YawRot(0.f, Controller->GetControlRotation().Yaw, 0.f);
-	const FVector Forward = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
-	const FVector Right = FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y);
-	if (!FMath::IsNearlyZero(MoveAxis.Y)) AddMovementInput(Forward, MoveAxis.Y);
-	if (!FMath::IsNearlyZero(MoveAxis.X)) AddMovementInput(Right, MoveAxis.X);
+
+	// 1) Read controller rotation (for debug) and camera forward
+	const FRotator CR = Controller->GetControlRotation();
+	UE_LOG(LogTemp, Warning, TEXT("[Move] Yaw=%.3f Pitch=%.3f"), CR.Yaw, CR.Pitch);
+
+	FVector CamFwd = FVector::ForwardVector;
+
+	if (FirstPersonCamera && FirstPersonCamera->IsActive())
+	{
+		CamFwd = FirstPersonCamera->GetForwardVector();
+	}
+	else if (ThirdPersonCamera && ThirdPersonCamera->IsActive())
+	{
+		CamFwd = ThirdPersonCamera->GetForwardVector();
+	}
+	else
+	{
+		CamFwd = CR.Vector(); // fallback
+	}
+
+	// 2) Project to XY plane
+	FVector Fwd2D = CamFwd; Fwd2D.Z = 0.f;
+	const bool bDegenerate = !Fwd2D.Normalize();
+
+	// 3) If degenerate (near vertical) OR if projected forward points opposite
+	// to the actor's facing (rare but can happen with certain rigs), rebase to actor yaw
+	FVector SafeFwd = Fwd2D;
+	{
+		const FVector ActorFwd = GetActorForwardVector().GetSafeNormal2D();
+		const float Dot = FVector::DotProduct(SafeFwd, ActorFwd);
+
+		if (bDegenerate || Dot < 0.f)
+		{
+			const FRotator FlatYaw(0.f, CR.Yaw, 0.f);
+			SafeFwd = FRotationMatrix(FlatYaw).GetUnitAxis(EAxis::X); // pure yaw forward
+			UE_LOG(LogTemp, Warning, TEXT("[Move] Rebased to yaw-only basis (bDegenerate=%d, Dot=%.3f)"), bDegenerate ? 1 : 0, Dot);
+		}
+	}
+
+	// 4) Build right from safe forward
+	const FVector SafeRight = FVector::CrossProduct(FVector::UpVector, SafeFwd).GetSafeNormal();
+
+	// 5) Log vectors to confirm signs
+	UE_LOG(LogTemp, Warning, TEXT("[Move] CamFwd=(%.3f,%.3f,%.3f)  SafeFwd2D=(%.3f,%.3f,%.3f)  Right2D=(%.3f,%.3f,%.3f)  Axis=(%.3f,%.3f)"),
+		CamFwd.X, CamFwd.Y, CamFwd.Z,
+		SafeFwd.X, SafeFwd.Y, SafeFwd.Z,
+		SafeRight.X, SafeRight.Y, SafeRight.Z,
+		MoveAxis.X, MoveAxis.Y
+	);
+
+	// 6) Draw arrows at feet to visualize basis
+	DebugDrawBasis(GetWorld(), GetActorLocation() + FVector(0, 0, 5), SafeFwd, SafeRight);
+
+	// 7) Apply input
+	AddMovementInput(SafeFwd, MoveAxis.Y);
+	AddMovementInput(SafeRight, MoveAxis.X);
+}
+
+void AShooterCharacter::Input_JumpStart()
+{
+	if (!GetCharacterMovement() || !GetCapsuleComponent())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Input_JumpStart: Missing movement or capsule component"));
+		return;
+	}
+
+	if (CanJump())
+	{
+		Jump();
+
+		if (ASC)
+		{
+			//ASC->ExecuteGameplayCue(ShooterTags::GameplayCue_Movement_Jump);
+		}
+	}
+}
+
+void AShooterCharacter::Input_JumpStop()
+{
+	StopJumping();
 }
 
 void AShooterCharacter::Input_Dash()
 {
-	UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: Input_Dash (Role=%d, Auth=%d)"), (int32)GetLocalRole(), HasAuthority() ? 1 : 0);
+	if (!ASC) return;
 
-	if (HasAuthority())
-	{
-		if (ASC)
-		{
-			ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(ShooterTags::Ability_Movement_Dash));
-		}
-	}
-	else
-	{
-		ServerTryActivateDash();
-	}
+	UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: Input_Dash (Role=%d, Auth=%d)"), (int32)GetLocalRole(), HasAuthority() ? 1 : 0);
+	ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(ShooterTags::Ability_Movement_Dash));
+
+	//UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: Input_Dash (Role=%d, Auth=%d)"), (int32)GetLocalRole(), HasAuthority() ? 1 : 0);
+
+	//if (HasAuthority())
+	//{
+	//	if (ASC)
+	//	{
+	//		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(ShooterTags::Ability_Movement_Dash));
+	//	}
+	//}
+	//else
+	//{
+	//	ServerTryActivateDash();
+	//}
 }
 
 // ------------------------------------------------------------
@@ -292,7 +376,21 @@ void AShooterCharacter::Input_FireReleased()
 }
 
 // GAS setup
-void AShooterCharacter::InitializeASC() { ASC->InitAbilityActorInfo(this, this); }
+void AShooterCharacter::InitializeASC()
+{
+	if (!ASC) return;
+
+	// Avoid reinitializing if already valid
+	if (ASC->AbilityActorInfo.IsValid() && ASC->AbilityActorInfo->AvatarActor == this)
+		return;
+
+	ASC->InitAbilityActorInfo(this, this);
+
+	UE_LOG(LogTemp, Log, TEXT("[ASC] Initialized for %s (Role=%s)"),
+		*GetNameSafe(this),
+		*UEnum::GetValueAsString(GetLocalRole()));
+}
+
 
 void AShooterCharacter::GrantStartupAbilities()
 {
@@ -335,7 +433,6 @@ void AShooterCharacter::GrantStartupAbilities()
 	}
 
 	bStartupAbilitiesGiven = true;
-	ASC->InitAbilityActorInfo(this, this);
 }
 
 bool AShooterCharacter::IsInIFrame() const
@@ -469,21 +566,26 @@ void AShooterCharacter::OnRep_UseThirdPersonCamera()
 {
 	ApplyCameraMode();
 }
-
 void AShooterCharacter::ApplyCameraMode()
 {
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		// Always decouple base rotation to prevent weird pitch carryover
+		Move->bIgnoreBaseRotation = true;
+	}
+
 	if (bUseThirdPersonCamera)
 	{
 		if (ThirdPersonCamera) ThirdPersonCamera->SetActive(true);
 		if (FirstPersonCamera) FirstPersonCamera->SetActive(false);
 
-		// In TP, movement can orient rotation if desired
 		if (UCharacterMovementComponent* Move = GetCharacterMovement())
 		{
 			Move->bOrientRotationToMovement = true;
+			Move->bUseControllerDesiredRotation = false;
 		}
+
 		bUseControllerRotationYaw = false;
-		bUseControllerRotationPitch = false;
 	}
 	else
 	{
@@ -493,9 +595,36 @@ void AShooterCharacter::ApplyCameraMode()
 		if (UCharacterMovementComponent* Move = GetCharacterMovement())
 		{
 			Move->bOrientRotationToMovement = false;
+			Move->bUseControllerDesiredRotation = true;
+			Move->bIgnoreBaseRotation = true;
+
+			// Keep consistent air control and prevent braking midair
+			Move->AirControl = 1.0f;
+			Move->BrakingDecelerationFalling = 0.f;
+			Move->FallingLateralFriction = 0.f;
 		}
+
 		bUseControllerRotationYaw = true;
-		bUseControllerRotationPitch = false; // FP camera handles pitch
+	}
+
+	// Enforce correct orientation even if mid-jump
+	if (Controller)
+	{
+		FRotator ControlRot = Controller->GetControlRotation();
+		ControlRot.Pitch = 0.f;
+		ControlRot.Roll = 0.f;
+		SetActorRotation(ControlRot);
+	}
+}
+
+void AShooterCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+
+	// Optional cue
+	if (ASC)
+	{
+		//ASC->ExecuteGameplayCue(ShooterTags::GameplayCue_Movement_Land);
 	}
 }
 

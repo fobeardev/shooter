@@ -11,8 +11,17 @@
 #include "GameFramework/Actor.h"
 #include "Net/UnrealNetwork.h"
 #include "Weapons/ShooterWeaponBase.h"
+#include <Components/SKGShooterPawnComponent.h>
+#include <Player/Components/ShooterCharacterMovement_Doom.h>
 
 AShooterCombatCharacter::AShooterCombatCharacter()
+	: AShooterCombatCharacter(FObjectInitializer::Get())
+{
+}
+
+AShooterCombatCharacter::AShooterCombatCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UShooterCharacterMovement_Doom>(
+		ACharacter::CharacterMovementComponentName))
 {
 	bReplicates = true;
 	SetReplicateMovement(true);
@@ -22,36 +31,43 @@ AShooterCombatCharacter::AShooterCombatCharacter()
 	ASC->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
 	CombatAttributes = CreateDefaultSubobject<UAttrSet_Combat>(TEXT("AttrSet_Combat"));
+
+	// SKG Shooter Framework pawn component
+	SKGShooterPawn = CreateDefaultSubobject<USKGShooterPawnComponent>(TEXT("SKGShooterPawn"));
 }
 
 void AShooterCombatCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (ASC)
-	{
-		ASC->InitAbilityActorInfo(this, this);
+	// No InitAbilityActorInfo here
+	UE_LOG(LogTemp, Log, TEXT("[ASC] BeginPlay() ASC=%s CombatAttributes=%s"),
+		*GetNameSafe(ASC),
+		*GetNameSafe(CombatAttributes));
 
-		// --- Force-register our default subobject attribute set
-		if (CombatAttributes)
-		{
-			ASC->AddSpawnedAttribute(CombatAttributes);
-		}
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("[ASC] Registered attribute sets for %s:"), *GetNameSafe(this));
-
-	TArray<UAttributeSet*> AttributeSets = ASC->GetSpawnedAttributes();
-
-	for (UAttributeSet* Set : AttributeSets)
-	{
-		UE_LOG(LogTemp, Log, TEXT(" - %s"), *Set->GetClass()->GetName());
-	}
+	UE_LOG(LogTemp, Warning, TEXT("Controller=%s  IsLocallyControlled=%d"),
+		*GetNameSafe(Controller),
+		IsLocallyControlled() ? 1 : 0);
 
 	if (HasAuthority() && DefaultWeaponClass)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("SpawnDefaultWeapon called for %s"), *GetName());
 		SpawnDefaultWeapon();
+	}
+}
+
+void AShooterCombatCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	if (ASC)
+	{
+		ASC->InitAbilityActorInfo(this, this);
+
+		if (CombatAttributes && !ASC->GetSpawnedAttributes().Contains(CombatAttributes))
+		{
+			ASC->AddSpawnedAttribute(CombatAttributes);
+		}
 	}
 }
 
@@ -267,6 +283,16 @@ void AShooterCombatCharacter::SpawnDefaultWeapon_Internal()
 	UE_LOG(LogTemp, Warning, TEXT("[SpawnDefaultWeapon_Internal] Socket location (%.1f, %.1f, %.1f) rotation (%.1f, %.1f, %.1f)"),
 		SocketTransform.GetLocation().X, SocketTransform.GetLocation().Y, SocketTransform.GetLocation().Z,
 		SocketTransform.Rotator().Pitch, SocketTransform.Rotator().Yaw, SocketTransform.Rotator().Roll);
+
+	if (SKGShooterPawn && EquippedWeapon)
+	{
+		SKGShooterPawn->SetHeldActor(EquippedWeapon);
+
+		if (EquippedWeapon)
+		{
+			EquippedWeapon->SetShooterPawn(SKGShooterPawn);
+		}
+	}
 }
 
 void AShooterCombatCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

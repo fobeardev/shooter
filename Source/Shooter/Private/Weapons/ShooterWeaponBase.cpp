@@ -25,6 +25,11 @@ AShooterWeaponBase::AShooterWeaponBase()
 void AShooterWeaponBase::BeginPlay()
 {
 	Super::BeginPlay();
+    
+    if (WeaponMeshComponent)
+    {
+        WeaponMeshComponent->SetCollisionProfileName(TEXT("Holdable"));
+    }
 
     if (ProceduralAnimComponent && ProceduralAnimComponent->bAutoInitialize)
     {

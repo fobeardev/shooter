@@ -56,8 +56,7 @@ AShooterFirearm::AShooterFirearm()
 
 	if (WeaponMeshComponent)
 	{
-		WeaponMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		WeaponMeshComponent->SetGenerateOverlapEvents(false);
+		WeaponMeshComponent->SetCollisionProfileName(TEXT("Holdable"));
 		WeaponMeshComponent->SetIsReplicated(true);
 	}
 }
@@ -65,16 +64,7 @@ AShooterFirearm::AShooterFirearm()
 void AShooterFirearm::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (ensure(FirearmComponent))
-	{
-		// Make sure the names are correct (safety if someone renames components)
-		FirearmComponent->SetFirearmMeshComponentName(WeaponMeshComponent->GetFName());
-		FirearmComponent->SetAttachmentManagerComponentName(
-			AttachmentManagerComponent ? AttachmentManagerComponent->GetFName() : NAME_None);
-		FirearmComponent->InitializeFirearmComponent();
-	}
-
+	
 	if (WeaponMeshComponent)
 	{
 		WeaponMeshComponent->SetComponentTickEnabled(false);
