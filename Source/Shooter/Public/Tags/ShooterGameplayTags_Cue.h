@@ -13,4 +13,5 @@ namespace ShooterTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Enemy_Flank);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Enemy_Retreat);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Combat_MeleeHit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Clone_Reprint);
 }

@@ -48,6 +48,7 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Damage_Death, "GameplayCue.Damag
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Enemy_Flank, "GameplayCue.Enemy.Flank");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Enemy_Retreat, "GameplayCue.Enemy.Retreat");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Combat_MeleeHit, "GameplayCue.Combat.MeleeHit");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::GameplayCue_Clone_Reprint, "GameplayCue.Clone.Reprint");
 
 // Data
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Data_Health_Current, "Data.Health.Current");
@@ -122,3 +123,18 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Meta_Genome_WeaponUnlocks, "Meta.Genome.Weap
 
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Meta_Run_RoomClears, "Meta.Run.RoomClears");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Meta_Run_Killstreak, "Meta.Run.Killstreak");
+
+// Arena Events
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Arena_Start, "Event.Arena.Start");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Arena_WaveCleared, "Event.Arena.WaveCleared");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Arena_End, "Event.Arena.End");
+
+// Optional extended arena flow
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Arena_MorphBegin, "Event.Arena.MorphBegin");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Arena_MorphEnd, "Event.Arena.MorphEnd");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Arena_RewardSpawned, "Event.Arena.RewardSpawned");
+
+// Run Events
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Run_ArenaCleared, "Event.Run.ArenaCleared");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Run_Start, "Event.Run.Start");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Run_End, "Event.Run.End");

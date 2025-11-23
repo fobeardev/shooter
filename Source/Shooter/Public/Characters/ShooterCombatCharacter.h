@@ -6,92 +6,110 @@
 #include "GameplayTagContainer.h"
 #include "ShooterCombatCharacter.generated.h"
 
-class USKGShooterPawnComponent;
+// Forward declarations
 class UAbilitySystemComponent;
 class UAttrSet_Combat;
 class AShooterWeaponBase;
+class USKGShooterPawnComponent;
+class UGameplayAbility;
 
 /**
- * Base combat character class shared by player and AI.
- * Handles:
- *  - Ability System setup
- *  - Combat attributes (Health, Stamina)
- *  - OnDeath events and replication
+ * Base combat-capable character (used by both Player and AI)
+ * - Owns ASC and CombatAttributes
+ * - Handles health, death, and weapon spawn
+ * - Grants Fire ability to all inheritors
  */
 UCLASS()
-class SHOOTER_API AShooterCombatCharacter : public ACharacter, public IAbilitySystemInterface
+class SHOOTER_API AShooterCombatCharacter
+	: public ACharacter
+	, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
 public:
 	AShooterCombatCharacter();
-	AShooterCombatCharacter(const FObjectInitializer& ObjectInitializer);
+	explicit AShooterCombatCharacter(const FObjectInitializer& ObjectInitializer);
 
 	// --- IAbilitySystemInterface ---
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
-	// --- Health / Combat Interface ---
-	UFUNCTION(BlueprintPure, Category = "Shooter|Combat")
-	float GetHealth() const;
+protected:
+	// --- Core Components ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	UAbilitySystemComponent* ASC;
 
-	UFUNCTION(BlueprintPure, Category = "Shooter|Combat")
-	float GetMaxHealth() const;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	UAttrSet_Combat* CombatAttributes;
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Combat")
-	bool IsDead() const;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Components")
+	USKGShooterPawnComponent* SKGShooterPawn;
 
-	// Death logic
-	UFUNCTION(BlueprintCallable, Category = "Combat")
-	virtual void OnOutOfHealth();
+	// --- Weapons ---
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shooter|Weapons")
+	TSubclassOf<AShooterWeaponBase> DefaultWeaponClass;
 
-	// Weapons / Attacks
-	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Shooter|Weapons")
+	AShooterWeaponBase* EquippedWeapon;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shooter|Weapons")
+	FName WeaponAttachSocket = TEXT("ik_hand_gun");
+
+	// --- Abilities ---
+	/** Shared fire ability (granted to all subclasses, including AI) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Abilities")
+	TSubclassOf<UGameplayAbility> FireWeaponAbilityClass;
+
+	/** Flag to ensure abilities aren’t granted twice */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "GAS|Abilities")
+	bool bStartupAbilitiesGiven = false;
+
+	// --- Health / State ---
+	UPROPERTY(ReplicatedUsing = OnRep_Death, BlueprintReadOnly, Category = "Health")
+	bool bIsDead = false;
+
+	// --- GAS setup ---
+	/** Grants shared startup abilities (fire, etc.) */
+	virtual void GrantStartupAbilities();
+
+public:
+	// --- Lifecycle ---
+	virtual void BeginPlay() override;
+	virtual void PossessedBy(AController* NewController) override;
+
+	UFUNCTION(BlueprintPure, Category = "Shooter|Weapons")
 	AShooterWeaponBase* GetEquippedWeapon() const { return EquippedWeapon; }
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
-	void SpawnDefaultWeapon();
+	// --- Combat / Health ---
+	UFUNCTION(BlueprintPure)
+	float GetHealth() const;
 
-	FORCEINLINE USKGShooterPawnComponent* GetShooterPawnComponent() const { return SKGShooterPawn; }
+	UFUNCTION(BlueprintPure)
+	float GetMaxHealth() const;
 
-protected:
-	virtual void BeginPlay() override;
-	void PossessedBy(AController* NewController) override;
+	UFUNCTION(BlueprintPure)
+	bool IsDead() const;
 
-	// --- GAS Components ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|GAS")
-	TObjectPtr<UAbilitySystemComponent> ASC;
+	UFUNCTION()
+	void OnOutOfHealth();
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|GAS")
-	TObjectPtr<UAttrSet_Combat> CombatAttributes;
+	UFUNCTION()
+	void HandleHealthChanged(float NewHealth, float MaxHealth);
 
-	// --- SKG ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|SKG")
-	TObjectPtr<USKGShooterPawnComponent> SKGShooterPawn;
-
-	// --- Internal: health monitoring ---
-	virtual void HandleHealthChanged(float NewHealth, float MaxHealth);
+	UFUNCTION()
 	virtual void HandleDeath();
 
 	UFUNCTION()
 	void OnRep_Death();
 
-	UPROPERTY(ReplicatedUsing = OnRep_Death)
-	bool bIsDead = false;
-
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-	// --- Weapons ---
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Weapon")
-	TSubclassOf<AShooterWeaponBase> DefaultWeaponClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Weapon")
-	FName WeaponAttachSocket = TEXT("ik_hand_gun");
-
-	UPROPERTY(Transient)
-	TObjectPtr<AShooterWeaponBase> EquippedWeapon = nullptr;
+	// --- Weapon handling ---
+	UFUNCTION(BlueprintCallable, Category = "Shooter|Weapons")
+	void SpawnDefaultWeapon();
 
 	UFUNCTION(Server, Reliable)
 	void Server_SpawnDefaultWeapon();
 
-	virtual void SpawnDefaultWeapon_Internal();   // shared spawn/attach
+	virtual void SpawnDefaultWeapon_Internal();
+
+	// --- Replication ---
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

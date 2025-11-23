@@ -9,6 +9,7 @@ class UGameplayAbility;
 class UGameplayEffect;
 class UCameraComponent;
 class USpringArmComponent;
+class UAugmentManagerComponent;
 class AShooterWeaponBase;
 class AActor;
 struct FInputActionValue;
@@ -77,13 +78,11 @@ protected:
 	virtual void SpawnDefaultWeapon_Internal() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void Landed(const FHitResult& Hit) override;
+	virtual void HandleDeath() override;
 
 	// --- Abilities ---
 	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
 	TSubclassOf<UGameplayAbility> DashAbilityClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
-	TSubclassOf<UGameplayAbility> FireWeaponAbilityClass;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
 	TSubclassOf<UGameplayEffect> GE_DashIFrames;
@@ -117,6 +116,10 @@ protected:
 	FTimerHandle DashRechargeTimer;
 	void DashRechargeTick_PerCharge();
 	void OnRefillAllTimer();
+
+	// --- Augment System ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Augments", meta = (AllowPrivateAccess = "true"))
+	UAugmentManagerComponent* AugmentManager;
 
 	// --- Camera ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Camera")
@@ -183,5 +186,6 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerTryActivateDash();
 
-	virtual void HandleDeath() override;
+	UPROPERTY(EditAnywhere, Category = "Debug")
+	bool bDebugMovementBasis = false;
 };

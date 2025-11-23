@@ -7,6 +7,11 @@
 
 UShooterCharacterMovement_Doom::UShooterCharacterMovement_Doom()
 {
+	UE_LOG(LogTemp, Error, TEXT("[DOOM MOVE] Constructed: %s (%p) Owner=%s"),
+		*GetNameSafe(this),
+		this,
+		*GetNameSafe(GetOwner()));
+
 	// Base walking and sprint speeds
 	MaxWalkSpeed = 500.f;
 	MaxSprintSpeed = 850.f;
@@ -46,11 +51,25 @@ float UShooterCharacterMovement_Doom::GetMaxSpeed() const
 		// keep high momentum in air
 		return FMath::Max(MaxSprintSpeed, MaxWalkSpeed * 1.2f);
 	}
+
 	return Super::GetMaxSpeed();
 }
 
 void UShooterCharacterMovement_Doom::BeginPlay()
 {
+	AActor* Owner = GetOwner();
+
+	if (!Owner || !Owner->HasActorBegunPlay())
+	{
+		// delay until next frame
+		FTimerHandle Handle;
+		GetWorld()->GetTimerManager().SetTimer(Handle, this,
+			&UShooterCharacterMovement_Doom::BeginPlay, 0.0f, false);
+		return;
+	}
+
+	Super::BeginPlay();
+
 	UE_LOG(LogTemp, Warning, TEXT("Movement initialized. UpdatedComponent=%s"), *GetNameSafe(UpdatedComponent));
 }
 

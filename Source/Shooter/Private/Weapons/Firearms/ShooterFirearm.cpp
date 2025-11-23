@@ -241,13 +241,40 @@ void AShooterFirearm::LaunchProjectile(const FSKGMuzzleTransform& LaunchTransfor
 
 	UBulletDataAsset* Bullet = nullptr;
 
-	if (BulletDataAsset.IsValid())
+	// --- AUGMENT-INTEGRATED BULLET LOGIC ---
+	// If the owner has the Ricochet augment, swap bullet data dynamically.
+	AActor* OwnerActor = GetOwner();
+	if (OwnerActor)
 	{
-		Bullet = BulletDataAsset.Get();
+		if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(OwnerActor))
+		{
+			if (ASC->HasMatchingGameplayTag(ShooterTags::Augment_Projectile_Ricochet))
+			{
+				if (RicochetBulletDataAsset.IsValid())
+				{
+					Bullet = RicochetBulletDataAsset.Get();
+					UE_LOG(LogTemp, Log, TEXT("[ShooterFirearm] Using RicochetBulletDataAsset on %s"), *GetNameSafe(this));
+				}
+				else if (RicochetBulletDataAsset.ToSoftObjectPath().IsValid())
+				{
+					Bullet = RicochetBulletDataAsset.LoadSynchronous();
+					UE_LOG(LogTemp, Log, TEXT("[ShooterFirearm] Loaded RicochetBulletDataAsset for %s"), *GetNameSafe(this));
+				}
+			}
+		}
 	}
-	else if (BulletDataAsset.ToSoftObjectPath().IsValid())
+
+	// --- fallback to default bullet if no augment or load failed ---
+	if (!Bullet)
 	{
-		Bullet = BulletDataAsset.LoadSynchronous();
+		if (BulletDataAsset.IsValid())
+		{
+			Bullet = BulletDataAsset.Get();
+		}
+		else if (BulletDataAsset.ToSoftObjectPath().IsValid())
+		{
+			Bullet = BulletDataAsset.LoadSynchronous();
+		}
 	}
 
 	if (!Bullet)
@@ -282,7 +309,7 @@ void AShooterFirearm::LaunchProjectile(const FSKGMuzzleTransform& LaunchTransfor
 		OnInjureBP,
 		OnUpdateBP,
 		FTBProjectileId::None,
-		NULL
+		DebugFlags
 	);
 }
 

@@ -2,6 +2,7 @@
 #include "ShooterGameplayTags_Ability.h"
 #include "ShooterGameplayTags_State.h"
 #include "ShooterGameplayTags_Enemy.h"
+#include "ShooterGameplayTags_Event.h"
 #include "ShooterGameplayTags_Cue.h"
 #include "ShooterGameplayTags_Data.h"
 #include "ShooterGameplayTags_Weapon.h"

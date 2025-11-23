@@ -26,7 +26,8 @@ public class Shooter : ModuleRules
 			"SKGProjectile",
 			"TerminalBallistics",
 			"AIModule",
-            "NavigationSystem"
+            "NavigationSystem",
+            "UMG"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] {  });

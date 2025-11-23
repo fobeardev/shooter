@@ -53,6 +53,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Ballistics")
 	TSoftObjectPtr<UBulletDataAsset> BulletDataAsset;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Ballistics")
+	TSoftObjectPtr<UBulletDataAsset> RicochetBulletDataAsset;
+
 	// ------------------------------
 	// SKG Components (keep these exact)
 	// ------------------------------

@@ -13,6 +13,7 @@
 #include "InputActionValue.h"
 #include "TimerManager.h"
 #include "DrawDebugHelpers.h"
+#include <Kismet/GameplayStatics.h>
 
 // SKG Shooter Framework
 #include <Components/SKGShooterPawnComponent.h>
@@ -21,9 +22,9 @@
 #include "Abilities/AttrSet_Combat.h"
 #include "Tags/ShooterGameplayTags.h"
 #include "Game/ShooterGameMode.h"
-#include <Kismet/GameplayStatics.h>
 #include "Weapons/Firearms/ShooterFirearm.h"
 #include "Player/Components/ShooterCharacterMovement_Doom.h"
+#include "Augments/AugmentManagerComponent.h"
 
 AShooterCharacter::AShooterCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -39,6 +40,8 @@ AShooterCharacter::AShooterCharacter(const FObjectInitializer& ObjectInitializer
     GetMesh()->SetupAttachment(RootComponent);
     GetMesh()->SetRelativeLocation(FVector(0.f, 0.f, -90.f));   // feet at capsule base
     GetMesh()->SetRelativeRotation(FRotator(0.f, -90.f, 0.f));  // face +X
+
+	AugmentManager = CreateDefaultSubobject<UAugmentManagerComponent>("AugmentManager");
 
     // -----------------------------
     // Third-person spring arm + camera
@@ -99,6 +102,7 @@ void AShooterCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(AShooterCharacter, Rep_CurrentDashCharges, COND_OwnerOnly);
 	DOREPLIFETIME(AShooterCharacter, bUseThirdPersonCamera);
+	DOREPLIFETIME(AShooterCharacter, AugmentManager);
 }
 
 void AShooterCharacter::OnRep_DashCharges()
@@ -117,18 +121,14 @@ void AShooterCharacter::BeginPlay()
 	CurrentDashCharges = FMath::Clamp(CurrentDashCharges, 0, MaxDashCharges);
 	UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: BeginPlay: Curr=%d/%d"), CurrentDashCharges, MaxDashCharges);
 
-	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	if (AugmentManager)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("MoveComp: %s UpdatedComponent=%s PawnOwner=%s"),
-			*Move->GetName(),
-			*GetNameSafe(Move->UpdatedComponent),
-			*GetNameSafe(Move->GetPawnOwner()));
+		if (HasAuthority())
+		{
+			// Ensure component replication is active
+			AugmentManager->SetIsReplicated(true);
+		}
 	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("GetCharacterMovement() returned NULL"));
-	}
-
 }
 
 void AShooterCharacter::PossessedBy(AController* NewController)
@@ -213,7 +213,11 @@ void AShooterCharacter::Input_Move(const FVector2D& MoveAxis)
 
 	// 1) Read controller rotation (for debug) and camera forward
 	const FRotator CR = Controller->GetControlRotation();
-	UE_LOG(LogTemp, Warning, TEXT("[Move] Yaw=%.3f Pitch=%.3f"), CR.Yaw, CR.Pitch);
+
+	if (bDebugMovementBasis)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Move] Yaw=%.3f Pitch=%.3f"), CR.Yaw, CR.Pitch);
+	}
 
 	FVector CamFwd = FVector::ForwardVector;
 
@@ -252,16 +256,19 @@ void AShooterCharacter::Input_Move(const FVector2D& MoveAxis)
 	// 4) Build right from safe forward
 	const FVector SafeRight = FVector::CrossProduct(FVector::UpVector, SafeFwd).GetSafeNormal();
 
-	// 5) Log vectors to confirm signs
-	UE_LOG(LogTemp, Warning, TEXT("[Move] CamFwd=(%.3f,%.3f,%.3f)  SafeFwd2D=(%.3f,%.3f,%.3f)  Right2D=(%.3f,%.3f,%.3f)  Axis=(%.3f,%.3f)"),
-		CamFwd.X, CamFwd.Y, CamFwd.Z,
-		SafeFwd.X, SafeFwd.Y, SafeFwd.Z,
-		SafeRight.X, SafeRight.Y, SafeRight.Z,
-		MoveAxis.X, MoveAxis.Y
-	);
+	if (bDebugMovementBasis)
+	{
+		// 5) Log vectors to confirm signs
+		UE_LOG(LogTemp, Warning, TEXT("[Move] CamFwd=(%.3f,%.3f,%.3f)  SafeFwd2D=(%.3f,%.3f,%.3f)  Right2D=(%.3f,%.3f,%.3f)  Axis=(%.3f,%.3f)"),
+			CamFwd.X, CamFwd.Y, CamFwd.Z,
+			SafeFwd.X, SafeFwd.Y, SafeFwd.Z,
+			SafeRight.X, SafeRight.Y, SafeRight.Z,
+			MoveAxis.X, MoveAxis.Y
+		);
 
-	// 6) Draw arrows at feet to visualize basis
-	DebugDrawBasis(GetWorld(), GetActorLocation() + FVector(0, 0, 5), SafeFwd, SafeRight);
+		// 6) Draw arrows at feet to visualize basis
+		DebugDrawBasis(GetWorld(), GetActorLocation() + FVector(0, 0, 5), SafeFwd, SafeRight);
+	}
 
 	// 7) Apply input
 	AddMovementInput(SafeFwd, MoveAxis.Y);
@@ -397,6 +404,8 @@ void AShooterCharacter::GrantStartupAbilities()
 	if (!ensure(GetLocalRole() == ROLE_Authority)) return;
 	if (!ASC) return;
 
+	Super::GrantStartupAbilities();
+
 	if (bStartupAbilitiesGiven)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: GrantStartupAbilities: already given (flag)"));
@@ -423,13 +432,6 @@ void AShooterCharacter::GrantStartupAbilities()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: GrantStartupAbilities: Skipped (already has dash)"));
-	}
-
-	if (FireWeaponAbilityClass)
-	{
-		FGameplayAbilitySpec Spec(FireWeaponAbilityClass, 1, INDEX_NONE, this);
-		Spec.GetDynamicSpecSourceTags().AddTag(ShooterTags::Ability_Weapon_Fire);
-		ASC->GiveAbility(Spec);
 	}
 
 	bStartupAbilitiesGiven = true;
