@@ -7,6 +7,7 @@
 #include "Tags/ShooterGameplayTags_Attachment.h"
 #include "Tags/ShooterGameplayTags_Augment.h"
 #include "Tags/ShooterGameplayTags_Meta.h"
+#include "Tags/ShooterGameplayTags_Interact.h"
 
 // Ability
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Ability_Movement_Dash, "Ability.Movement.Dash");
@@ -21,6 +22,9 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Ability_Weapon_Switch, "Ability.Weapon.Switc
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Ability_Utility_Interact, "Ability.Utility.Interact");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Ability_Utility_UseItem, "Ability.Utility.UseItem");
 
+// UI 
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::UI_Interact_Available, "UI.Interact.Available");
+
 // State
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_IFrame, "State.IFrame");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Dashing, "State.Dashing");
@@ -33,6 +37,8 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Bleed, "State.Bleed");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Burn, "State.Burn");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Shock, "State.Shock");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Slow, "State.Slow");
+
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::State_Interactable, "State.Interactable");
 
 // Enemy
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Enemy_Type_Charger, "Enemy.Type.Charger");
@@ -138,3 +144,6 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Arena_RewardSpawned, "Event.Arena.Rewa
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Run_ArenaCleared, "Event.Run.ArenaCleared");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Run_Start, "Event.Run.Start");
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Run_End, "Event.Run.End");
+
+// Interaction Events
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Interact, "Event.Interact");

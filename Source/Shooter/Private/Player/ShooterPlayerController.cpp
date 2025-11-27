@@ -69,6 +69,11 @@ void AShooterPlayerController::SetupInputComponent()
             EIC->BindAction(IA_Fire, ETriggerEvent::Completed, this, &AShooterPlayerController::OnFire);
         }
 
+        if (IA_Interact)
+        {
+            EIC->BindAction(IA_Interact, ETriggerEvent::Started, this, &AShooterPlayerController::OnInteractPressed);
+        }
+
         // --- Debug Damage Key (e.g. press "K" to self-damage) ---
         if (IA_DebugDamage)
         {
@@ -129,6 +134,16 @@ void AShooterPlayerController::OnFire(const FInputActionValue& Value)
         const bool bPressed = Value.Get<bool>();
         if (bPressed) C->Input_FirePressed();
         else          C->Input_FireReleased();
+    }
+}
+
+void AShooterPlayerController::OnInteractPressed()
+{
+    AShooterCharacter* SC = Cast<AShooterCharacter>(GetPawn());
+
+    if (SC)
+    {
+        SC->Input_Interact();
     }
 }
 

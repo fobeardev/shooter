@@ -382,6 +382,18 @@ void AShooterCharacter::Input_FireReleased()
 	ASC->CancelAbilities(&TagsToCancel);
 }
 
+void AShooterCharacter::Input_Interact()
+{
+	UE_LOG(LogTemp, Error, TEXT("Character Input_Interact reached!"));
+
+	if (ASC)
+	{
+		ASC->TryActivateAbilitiesByTag(
+			FGameplayTagContainer(ShooterTags::Ability_Utility_Interact)
+		);
+	}
+}
+
 // GAS setup
 void AShooterCharacter::InitializeASC()
 {
@@ -433,6 +445,30 @@ void AShooterCharacter::GrantStartupAbilities()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Dash[Char]: GrantStartupAbilities: Skipped (already has dash)"));
 	}
+
+	// --- Interact Ability ---
+	bool bHasInteract = false;
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.Ability && Spec.Ability->GetClass() == InteractAbilityClass)
+		{
+			bHasInteract = true;
+			break;
+		}
+	}
+
+	if (!bHasInteract && InteractAbilityClass)
+	{
+		FGameplayAbilitySpec InteractSpec(InteractAbilityClass, 1, INDEX_NONE, this);
+
+		// Tag the spec so ASC->TryActivateAbilitiesByTag() works
+		InteractSpec.GetDynamicSpecSourceTags().AddTag(ShooterTags::Ability_Utility_Interact);
+
+		ASC->GiveAbility(InteractSpec);
+
+		UE_LOG(LogTemp, Warning, TEXT("StartupAbilities: Granted InteractAbility."));
+	}
+
 
 	bStartupAbilitiesGiven = true;
 }
@@ -789,6 +825,38 @@ void AShooterCharacter::HandleDeath()
 			false
 		);
 	}
+}
+
+AActor* AShooterCharacter::PerformInteractionTrace(float Distance, FHitResult& OutHit)
+{
+	OutHit = FHitResult();
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return nullptr;
+	}
+
+	APlayerCameraManager* Cam = PC->PlayerCameraManager;
+	if (!Cam)
+	{
+		return nullptr;
+	}
+
+	const FVector Start = Cam->GetCameraLocation();
+	const FVector End = Start + (Cam->GetActorForwardVector() * Distance);
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(InteractTrace), false, this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		OutHit,
+		Start,
+		End,
+		ECC_Visibility,
+		Params
+	);
+
+	return bHit ? OutHit.GetActor() : nullptr;
 }
 
 void AShooterCharacter::Debug_ApplySelfDamage()

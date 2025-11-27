@@ -62,6 +62,9 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     TObjectPtr<UInputAction> IA_Fire;
 
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    TObjectPtr<UInputAction> IA_Interact;
+
     /** Debug key to self-apply damage for respawn testing */
     UPROPERTY(EditDefaultsOnly, Category = "Input|Debug")
     TObjectPtr<UInputAction> IA_DebugDamage;
@@ -90,6 +93,8 @@ private:
 
     UFUNCTION()
     void OnFire(const FInputActionValue& Value);
+
+    void OnInteractPressed();
 
     /** Debug: self-damage test */
     UFUNCTION()

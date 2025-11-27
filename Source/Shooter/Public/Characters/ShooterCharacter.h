@@ -39,6 +39,9 @@ public:
 	void Input_Aim(const FInputActionValue& Value);
 	void Input_FirePressed();
 	void Input_FireReleased();
+	void Input_Interact(); // Called by the controller when Interact is pressed
+
+	AActor* PerformInteractionTrace(float Distance, FHitResult& OutHit);
 
 	// --- Camera ---
 	UFUNCTION(BlueprintCallable, Category = "Shooter|Camera")
@@ -79,10 +82,13 @@ protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void Landed(const FHitResult& Hit) override;
 	virtual void HandleDeath() override;
-
+	
 	// --- Abilities ---
 	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
 	TSubclassOf<UGameplayAbility> DashAbilityClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
+	TSubclassOf<UGameplayAbility> InteractAbilityClass;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Abilities")
 	TSubclassOf<UGameplayEffect> GE_DashIFrames;
