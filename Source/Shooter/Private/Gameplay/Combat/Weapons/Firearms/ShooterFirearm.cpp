@@ -310,7 +310,7 @@ void AShooterFirearm::LaunchProjectile(const FSKGMuzzleTransform& LaunchTransfor
 		OnInjureBP,
 		OnUpdateBP,
 		FTBProjectileId::None,
-		DebugFlags
+		0 // DebugFlags
 	);
 }
 
