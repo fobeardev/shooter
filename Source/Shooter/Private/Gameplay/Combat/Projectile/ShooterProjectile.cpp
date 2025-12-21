@@ -1,17 +1,25 @@
 #include "Gameplay/Combat/Projectile/ShooterProjectile.h"
+#include "Gameplay/Combat/Projectile/ShooterProjectilePoolSubsystem.h"
 
 #include "Components/SphereComponent.h"
 #include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Kismet/GameplayStatics.h"
-#include "NiagaraFunctionLibrary.h"
+#include "Engine/World.h"
+
+#include "AbilitySystemGlobals.h"
+#include "AbilitySystemComponent.h"
+#include "GameplayEffect.h"
+#include "GameplayEffectTypes.h"
 
 AShooterProjectile::AShooterProjectile()
 {
     PrimaryActorTick.bCanEverTick = true;
+
     bReplicates = true;
-    bAlwaysRelevant = false; // You can tweak relevancy later.
+    bAlwaysRelevant = false;
     SetNetUpdateFrequency(60.0f);
 
     CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("Collision"));
@@ -50,21 +58,51 @@ void AShooterProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     DOREPLIFETIME(AShooterProjectile, bIsActive);
 }
 
-void AShooterProjectile::InitializeFromConfig(const FProjectileConfig& InConfig)
+void AShooterProjectile::InitializeFromSpec(
+    const FVector& SpawnLocation,
+    const FVector& ShootDirection,
+    const FProjectileConfig& InConfig,
+    const FProjectileIdentity& InIdentity,
+    AActor* InInstigatorActor,
+    AController* InInstigatorController,
+    UShooterProjectilePoolSubsystem* InOwningPool)
 {
-    Config = InConfig;
-    CollisionComponent->SetSphereRadius(Config.Radius);
+    SetActorLocation(SpawnLocation);
+    SetActorRotation(ShootDirection.Rotation());
 
-    if (Config.TracerFX.IsValid())
+    Config = InConfig;
+    Identity = InIdentity;
+
+    InstigatorActorWeak = InInstigatorActor;
+    InstigatorControllerWeak = InInstigatorController;
+    OwningPool = InOwningPool;
+
+    RemainingRicochets = FMath::Max(0, Config.MaxRicochets);
+    RemainingPierces = FMath::Max(0, Config.MaxPierces);
+
+    // Initialize velocity from direction + speed
+    Velocity = ShootDirection.GetSafeNormal() * Config.InitialSpeed;
+
+    // Lifetime
+    LifeTimeRemaining = FMath::Max(0.01f, Config.MaxLifeTime);
+
+    SetActorHiddenInGame(false);
+    SetActorEnableCollision(true);
+
+    // Optional: tracer FX spawn if you do that in projectile
+    if (Config.bSpawnTracerFX)
     {
-        if (UNiagaraSystem* TracerSystem = Config.TracerFX.Get())
-        {
-            TracerComponent->SetAsset(TracerSystem);
-        }
+        SpawnTracerFX();
     }
 }
 
-void AShooterProjectile::OnPooledActivate(const FVector& SpawnLocation, const FVector& Direction, AController* InstigatorController, AActor* InstigatorActor)
+
+void AShooterProjectile::OnPooledActivate(
+    const FVector& SpawnLocation,
+    const FVector& Direction,
+    AController* InstigatorController,
+    AActor* InstigatorActor
+)
 {
     bIsActive = true;
     ElapsedLifeTime = 0.0f;
@@ -88,6 +126,7 @@ void AShooterProjectile::OnPooledActivate(const FVector& SpawnLocation, const FV
 void AShooterProjectile::OnPooledDeactivate()
 {
     bIsActive = false;
+
     SetActorHiddenInGame(true);
     SetActorEnableCollision(false);
 
@@ -98,15 +137,20 @@ void AShooterProjectile::OnPooledDeactivate()
 
     Velocity = FVector::ZeroVector;
     ElapsedLifeTime = 0.0f;
+
+    if (OwningPool.IsValid())
+    {
+        OwningPool->ReturnToPool(this);
+    }
 }
 
 void AShooterProjectile::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
 
+    // Server drives movement; clients just receive replication.
     if (!bIsActive || !HasAuthority())
     {
-        // Server drives movement; clients receive replicated transforms.
         return;
     }
 
@@ -117,10 +161,10 @@ void AShooterProjectile::Tick(float DeltaSeconds)
         return;
     }
 
-    // Simple gravity
     if (!FMath::IsNearlyZero(Config.GravityScale))
     {
-        Velocity += FVector(0.0f, 0.0f, GetWorld()->GetGravityZ() * Config.GravityScale * DeltaSeconds);
+        const float GravityZ = GetWorld()->GetGravityZ();
+        Velocity += FVector(0.0f, 0.0f, GravityZ * Config.GravityScale * DeltaSeconds);
     }
 
     const FVector CurrentLocation = GetActorLocation();
@@ -129,6 +173,9 @@ void AShooterProjectile::Tick(float DeltaSeconds)
 
     FHitResult HitResult;
     bool bHit = false;
+
+    FCollisionQueryParams QueryParams(TEXT("ProjectileTrace"), true, InstigatorActorWeak.Get());
+    QueryParams.bReturnPhysicalMaterial = false;
 
     if (Config.bUseSphereTrace)
     {
@@ -139,7 +186,7 @@ void AShooterProjectile::Tick(float DeltaSeconds)
             FQuat::Identity,
             Config.CollisionChannel,
             FCollisionShape::MakeSphere(Config.Radius),
-            FCollisionQueryParams(TEXT("ProjectileTrace"), true, InstigatorActorWeak.Get())
+            QueryParams
         );
     }
     else
@@ -149,14 +196,14 @@ void AShooterProjectile::Tick(float DeltaSeconds)
             CurrentLocation,
             TargetLocation,
             Config.CollisionChannel,
-            FCollisionQueryParams(TEXT("ProjectileTrace"), true, InstigatorActorWeak.Get())
+            QueryParams
         );
     }
 
     if (bHit)
     {
         SetActorLocation(HitResult.Location);
-        OnProjectileHit(HitResult);
+        HandleProjectileHit(HitResult);
     }
     else
     {
@@ -166,7 +213,7 @@ void AShooterProjectile::Tick(float DeltaSeconds)
     UpdateTracerFX();
 }
 
-void AShooterProjectile::OnProjectileHit(const FHitResult& Hit)
+void AShooterProjectile::HandleProjectileHit(const FHitResult& Hit)
 {
     if (!HasAuthority())
     {
@@ -187,9 +234,64 @@ void AShooterProjectile::ApplyDamage(const FHitResult& Hit)
         return;
     }
 
-    AController* InstigatorController = InstigatorControllerWeak.Get();
-    AActor* InstigatorActor = InstigatorActorWeak.Get();
+    if (Config.DamageGameplayEffectClass.ToSoftObjectPath().IsValid())
+    {
+        UAbilitySystemComponent* SourceASC =
+            UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InstigatorActorWeak.Get());
 
+        UAbilitySystemComponent* TargetASC =
+            UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HitActor);
+
+        if (!SourceASC || !TargetASC)
+        {
+            return;
+        }
+
+        TSubclassOf<UGameplayEffect> DamageGE =
+            Config.DamageGameplayEffectClass.LoadSynchronous();
+
+        if (!DamageGE)
+        {
+            return;
+        }
+
+        // Convert cm/s -> m/s
+        const float VelocityMS = Velocity.Size() / 100.0f;
+
+        // Guard against invalid mass
+        const float BulletMassKg = FMath::Max(Config.BulletMassKg, 0.001f);
+
+        // KE = 0.5 * m * v^2
+        const float KE = 0.5f * BulletMassKg * (VelocityMS * VelocityMS);
+
+        // Map to gameplay damage window
+        const float ImpactEnergy = FMath::GetMappedRangeValueClamped(
+            FVector2D(0.0f, 3500.0f),
+            FVector2D(10.0f, 50.0f),
+            KE
+        );
+
+        FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+        Context.AddInstigator(InstigatorActorWeak.Get(), this);
+
+        FGameplayEffectSpecHandle SpecHandle =
+            SourceASC->MakeOutgoingSpec(DamageGE, 1.0f, Context);
+
+        if (!SpecHandle.IsValid())
+        {
+            return;
+        }
+
+        SpecHandle.Data->SetSetByCallerMagnitude(
+            Config.SetByCallerDamageTag,
+            -ImpactEnergy
+        );
+
+        TargetASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+        return;
+    }
+
+    // Fallback non-GAS damage
     if (Config.Damage > 0.0f)
     {
         TSubclassOf<UDamageType> DamageClass = Config.DamageTypeClass;
@@ -203,9 +305,9 @@ void AShooterProjectile::ApplyDamage(const FHitResult& Hit)
             Config.Damage,
             Velocity.GetSafeNormal(),
             Hit,
-            InstigatorController,
-            InstigatorActor,
-			DamageClass
+            InstigatorControllerWeak.Get(),
+            InstigatorActorWeak.Get(),
+            DamageClass
         );
     }
 }
@@ -217,15 +319,18 @@ void AShooterProjectile::SpawnImpactFX(const FHitResult& Hit)
         return;
     }
 
-    if (UNiagaraSystem* ImpactSystem = Config.ImpactFX.Get())
+    UNiagaraSystem* ImpactSystem = Config.ImpactFX.Get();
+    if (!ImpactSystem)
     {
-        UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-            GetWorld(),
-            ImpactSystem,
-            Hit.ImpactPoint,
-            Hit.ImpactNormal.Rotation()
-        );
+        return;
     }
+
+    UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+        GetWorld(),
+        ImpactSystem,
+        Hit.ImpactPoint,
+        Hit.ImpactNormal.Rotation()
+    );
 }
 
 void AShooterProjectile::UpdateTracerFX()
@@ -235,8 +340,7 @@ void AShooterProjectile::UpdateTracerFX()
         return;
     }
 
-    // Optional: update parameters like speed, distance from StartLocation, etc.
-    // Example:
+    // Example of parameter update (optional)
     // const float Distance = FVector::Dist(StartLocation, GetActorLocation());
     // TracerComponent->SetFloatParameter(TEXT("Distance"), Distance);
 }

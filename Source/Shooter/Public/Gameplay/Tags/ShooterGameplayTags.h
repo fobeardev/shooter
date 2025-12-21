@@ -9,3 +9,5 @@
 #include "ShooterGameplayTags_Attachment.h"
 #include "ShooterGameplayTags_Augment.h"
 #include "ShooterGameplayTags_Meta.h"
+#include "ShooterGameplayTags_Interact.h"
+#include "ShooterGameplayTags_Projectile.h"

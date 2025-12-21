@@ -1,8 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameplayTagContainer.h"
 #include "Gameplay/Combat/Weapons/Base/ShooterWeaponBase.h"
+#include "Gameplay/Combat/Projectile/ProjectileConfig.h"
+#include "Gameplay/Combat/Projectile/ProjectileIdentity.h"
+
 #include "ShooterFirearm.generated.h"
 
 class UGameplayEffect;
@@ -16,108 +18,100 @@ class USKGOffhandIKComponent;
 class USKGMuzzleComponent;
 struct FSKGMuzzleTransform;
 
-/**
- * Firearm implementation using SKG’s modular components.
- * - No dependency on ASKGFirearm (BP convenience class)
- * - Keeps your original component layout & BeginPlay init order
- * - Implements firing via SKG component API (ShotPerformed + Muzzle)
- */
 UCLASS()
 class SHOOTER_API AShooterFirearm : public AShooterWeaponBase
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	AShooterFirearm();
+    AShooterFirearm();
 
-	// === Ability/Input entry points ===
-	virtual void Fire() override;
+    virtual void Fire() override;
+    virtual void FireWithProjectileSpec(const FProjectileConfig& Config, const FProjectileIdentity& Identity) override;
+    virtual void Server_Fire_Implementation() override;
+    virtual void StopFire() override;
+    
+    virtual bool CanPerformAction() const override;
 
-	virtual void Server_Fire_Implementation() override;
+    // Phase 2: ability assembles config; firearm stores and uses it during auto/burst timers.
+    void SetFireConfig(const FProjectileConfig& InConfig);
+    const FProjectileConfig& GetFireConfig() const { return FireConfig; }
 
-	virtual void StopFire() override;
+    // Ability may need muzzle without firing.
+    FSKGMuzzleTransform GetMuzzleTransform() const;
 
-	// WeaponBase contracts
-	virtual bool CanPerformAction() const override;
+    // Ability reads these to build config.
+    const TSoftObjectPtr<UBulletDataAsset>& GetBulletDataAsset() const { return BulletDataAsset; }
+    const TSoftObjectPtr<UBulletDataAsset>& GetRicochetBulletDataAsset() const { return RicochetBulletDataAsset; }
 
-protected:
-	// --- AActor
-	virtual void BeginPlay() override;
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+    // Ability reads this to inject into config.
+    const TSoftClassPtr<UGameplayEffect>& GetDamageGameplayEffectClass() const { return DamageGameplayEffectClass; }
 
-	UPROPERTY(EditDefaultsOnly, Category = "Combat|GAS")
-	TSoftClassPtr<UGameplayEffect> DamageGameplayEffectClass;
-
-	// --- Terminal Ballistics Configuration ---
-	/** Bullet Data Asset defining mass, radius, drag, tracer, etc. */
-	UPROPERTY(EditDefaultsOnly, Category = "Ballistics")
-	TSoftObjectPtr<UBulletDataAsset> BulletDataAsset;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Ballistics")
-	TSoftObjectPtr<UBulletDataAsset> RicochetBulletDataAsset;
-
-	// ------------------------------
-	// SKG Components (keep these exact)
-	// ------------------------------
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
-	TObjectPtr<USKGFirearmComponent> FirearmComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
-	TObjectPtr<USKGAttachmentManagerComponent> AttachmentManagerComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
-	TObjectPtr<USKGMuzzleComponent> MuzzleComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
-	TObjectPtr<USKGOffhandIKComponent> OffhandIKComponent;
+    const FProjectileConfig& GetBaseProjectileConfig() const { return BaseProjectileConfig; }
+    const FProjectileIdentity& GetBaseProjectileIdentity() const { return BaseProjectileIdentity; }
 
 protected:
-	// ------------------------------
-	// Firing Logic
-	// ------------------------------
-	virtual void HandleFire_Internal() override;
-	virtual void HandleStopFire_Internal() override;
+    virtual void BeginPlay() override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	void BeginAutoIfNeeded();     // set timer if Auto/Burst
-	void ClearFireTimers();
+    UPROPERTY(EditDefaultsOnly, Category = "Combat|GAS")
+    TSoftClassPtr<UGameplayEffect> DamageGameplayEffectClass;
 
-	// Cosmetic hooks (Blueprint can implement)
-	UFUNCTION(BlueprintImplementableEvent, Category = "Shooter|FX")
-	void PlayFireEffects();
+    // Still stored on the firearm as weapon tuning data (Phase 2 reads these from ability).
+    UPROPERTY(EditDefaultsOnly, Category = "Ballistics")
+    TSoftObjectPtr<UBulletDataAsset> BulletDataAsset;
 
-	virtual void LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform, bool bIsLocalFire);
+    UPROPERTY(EditDefaultsOnly, Category = "Ballistics")
+    TSoftObjectPtr<UBulletDataAsset> RicochetBulletDataAsset;
 
-	// Server authoritative spawn entry (if you want a pure C++ path)
-	UFUNCTION(Server, Reliable)
-	void Server_LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform);
+    // SKG Components
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+    TObjectPtr<USKGFirearmComponent> FirearmComponent;
 
-	// --- TB dynamic delegate handlers ---
-	UFUNCTION()
-	void OnBulletHit_TB(const FTBImpactParams& Impact);
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+    TObjectPtr<USKGAttachmentManagerComponent> AttachmentManagerComponent;
 
-	UFUNCTION()
-	void OnBulletUpdate_TB(const FTBProjectileFlightData& Flight);
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+    TObjectPtr<USKGMuzzleComponent> MuzzleComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Firearm")
+    TObjectPtr<USKGOffhandIKComponent> OffhandIKComponent;
+    
+    // Designer-tunable base projectile (Phase 3 foundation)
+    UPROPERTY(EditDefaultsOnly, Category = "Firearm|Projectile")
+    FProjectileConfig BaseProjectileConfig;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Firearm|Projectile")
+    FProjectileIdentity BaseProjectileIdentity;
+
+    UFUNCTION(Server, Reliable)
+    void Server_FireWithProjectileSpec(const FProjectileConfig& Config, const FProjectileIdentity& Identity);
+    
+    virtual void HandleFire_Internal() override;
+    virtual void HandleStopFire_Internal() override;
+
+    void BeginAutoIfNeeded();
+    void ClearFireTimers();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Shooter|FX")
+    void PlayFireEffects();
+
+    // Phase 2: firearm only spawns using a config already assembled by ability.
+    void LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform, const FProjectileConfig& Config, bool bIsLocalFire);
 
 protected:
-	UPROPERTY(EditDefaultsOnly, Category = "Firearm|Projectile")
-	TSubclassOf<AActor> ProjectileClass;
+    // Cached config used by auto/burst timer shots.
+    FProjectileConfig FireConfig;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Firearm|Projectile")
-	float ProjectileVelocity = 30000.0f; // cm/s, about 300 m/s
+    // Timers for Auto/Burst
+    FTimerHandle AutoTimerHandle;
 
-	// Timers for Auto/Burst
-	FTimerHandle AutoTimerHandle;
+    int32 PressCount = 0;
+    int32 ReleaseCount = 0;
 
-	// Optional: local “input edge” counters if you want parity with _Old
-	int32 PressCount = 0;
-	int32 ReleaseCount = 0;
+    UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
+    float FireRateSeconds = 0.12f;
 
-	// Rate-of-fire fallback (if no data asset yet)
-	UPROPERTY(EditDefaultsOnly, Category = "Shooter|Firearm")
-	float FireRateSeconds = 0.12f;
-
-	// Burst tracking
-	int32 PendingBurstShots = 0;
-	int32 BurstSize = 3;  // you can drive this from data later
+    int32 PendingBurstShots = 0;
+    int32 BurstSize = 3;
 };

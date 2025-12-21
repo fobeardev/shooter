@@ -147,3 +147,16 @@ UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Run_End, "Event.Run.End");
 
 // Interaction Events
 UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Event_Interact, "Event.Interact");
+
+// Projectile
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Projectile_Type_Bullet, "Projectile.Type.Bullet");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Projectile_Type_Explosive, "Projectile.Type.Explosive");
+
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Projectile_Element_None, "Projectile.Element.None");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Projectile_Element_Fire, "Projectile.Element.Fire");
+
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Projectile_Modifier_Ricochet, "Projectile.Modifier.Ricochet");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Projectile_Modifier_Pierce, "Projectile.Modifier.Pierce");
+
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Projectile_Pattern_Single, "Projectile.Pattern.Single");
+UE_DEFINE_GAMEPLAY_TAG(ShooterTags::Projectile_Pattern_Spread, "Projectile.Pattern.Spread");

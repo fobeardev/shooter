@@ -2,31 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "ProjectileConfig.h"
+#include "Gameplay/Combat/Projectile/ProjectileConfig.h"
+#include "Gameplay/Combat/Projectile/ProjectileIdentity.h"
 #include "ShooterProjectilePoolSubsystem.generated.h"
 
 class AShooterProjectile;
-
-USTRUCT()
-struct FProjectileSpawnParams
-{
-    GENERATED_BODY()
-
-    UPROPERTY()
-    FProjectileConfig Config;
-
-    UPROPERTY()
-    FVector SpawnLocation = FVector::ZeroVector;
-
-    UPROPERTY()
-    FVector Direction = FVector::ForwardVector;
-
-    UPROPERTY()
-    AController* InstigatorController = nullptr;
-
-    UPROPERTY()
-    AActor* InstigatorActor = nullptr;
-};
 
 UCLASS()
 class SHOOTER_API UShooterProjectilePoolSubsystem : public UWorldSubsystem
@@ -38,11 +18,20 @@ public:
 
     virtual void Deinitialize() override;
 
-    AShooterProjectile* SpawnProjectile(const FProjectileSpawnParams& Params);
+    UFUNCTION(BlueprintCallable, Category = "Shooter|Projectile")
+    class AShooterProjectile* SpawnProjectile(
+        TSubclassOf<AActor> ProjectileClass,
+        const FVector& SpawnLocation,
+        const FVector& ShootDirection,
+        const FProjectileConfig& Config,
+        const FProjectileIdentity& Identity,
+        AActor* InstigatorActor,
+        AController* InstigatorController);
+
+    void ReturnToPool(AShooterProjectile* Projectile);
 
 protected:
     AShooterProjectile* AcquireOrCreateProjectile(const FProjectileConfig& Config);
-    void ReturnToPool(AShooterProjectile* Projectile);
 
 protected:
     UPROPERTY()

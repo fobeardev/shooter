@@ -2,12 +2,17 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
-#include "Actors/SKGBaseActor.h"                // SKG base
+#include "Actors/SKGBaseActor.h" // SKG base
+
 #include "ShooterWeaponBase.generated.h"
 
+// Forward declarations
 class UMeshComponent;
 class USKGShooterPawnComponent;
 class USKGProceduralAnimComponent;
+
+struct FProjectileConfig;
+struct FProjectileIdentity;
 
 /**
  * Shared parent for all weapons (firearms, melee, energy).
@@ -18,84 +23,85 @@ class USKGProceduralAnimComponent;
 UCLASS(Abstract)
 class SHOOTER_API AShooterWeaponBase : public ASKGBaseActor
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	AShooterWeaponBase();
+    // Constructor
+    AShooterWeaponBase();
 
-	// --- Core virtuals for children ---
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
-	virtual void Fire();
+    // --- Core virtuals for children ---
+    UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
+    virtual void Fire();
 
-	UFUNCTION(Server, Reliable)
-	virtual void Server_Fire();
+    UFUNCTION(Server, Reliable)
+    virtual void Server_Fire();
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
-	virtual void StopFire();
+    UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
+    virtual void StopFire();
 
-	UFUNCTION(Server, Reliable)
-	virtual void Server_StopFire();
+    UFUNCTION(Server, Reliable)
+    virtual void Server_StopFire();
 
-	/** Default “can I act now?” gate shared by children. */
-	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
-	virtual bool CanPerformAction() const;
+    /** Default “can I act now?” gate shared by children. */
+    UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
+    virtual bool CanPerformAction() const;
 
-	/** The primary mesh of this weapon (child overrides if needed). */
-	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
-	virtual UMeshComponent* GetWeaponMesh() const;
+    /** The primary mesh of this weapon (child overrides if needed). */
+    UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
+    virtual UMeshComponent* GetWeaponMesh() const;
 
-	/** Current fire mode (replicated). */
-	UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
-	const FGameplayTag& GetCurrentFireModeTag() const { return CurrentFireModeTag; }
+    /** Current fire mode (replicated). */
+    UFUNCTION(BlueprintPure, Category = "Shooter|Weapon")
+    const FGameplayTag& GetCurrentFireModeTag() const { return CurrentFireModeTag; }
+
+    // Public setters and getters
+    void SetShooterPawn(USKGShooterPawnComponent* InPawn)
+    {
+        ShooterPawn = InPawn;
+    }
+
+    FORCEINLINE USKGShooterPawnComponent* GetShooterPawn() const
+    {
+        return ShooterPawn;
+    }
 
 protected:
-	virtual void BeginPlay() override;
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+    // Overrides
+    virtual void BeginPlay() override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	virtual void HandleFire_Internal();        // default: no-op
-	virtual void HandleStopFire_Internal();    // default: no-op
+    // Internal handlers
+    virtual void HandleFire_Internal();        // default: no-op
+    virtual void HandleStopFire_Internal();    // default: no-op
 
-protected:
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon")
-	TObjectPtr<UMeshComponent> WeaponMeshComponent;
+    UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
+    virtual void FireWithProjectileSpec(const FProjectileConfig& Config, const FProjectileIdentity& Identity);
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon")
-	TObjectPtr<USKGProceduralAnimComponent> ProceduralAnimComponent;
+    // Components
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon")
+    TObjectPtr<UMeshComponent> WeaponMeshComponent;
 
-	// Owner shooter pawn component (cached; NOT replicated)
-	UPROPERTY()
-	TObjectPtr<USKGShooterPawnComponent> ShooterPawn = nullptr;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon")
+    TObjectPtr<USKGProceduralAnimComponent> ProceduralAnimComponent;
 
-	/** Optional data asset pointer for game-side tuning; NOT replicated. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shooter|Weapon")
-	TObjectPtr<UPrimaryDataAsset> WeaponDataAsset = nullptr;
+    // Cached owner shooter pawn component (NOT replicated)
+    UPROPERTY()
+    TObjectPtr<USKGShooterPawnComponent> ShooterPawn = nullptr;
 
-	/** Weapon class (Pistol/AR/etc) for UI/rules. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shooter|Weapon|Tags")
-	FGameplayTag WeaponClassTag;
+    // Weapon configuration
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shooter|Weapon")
+    TObjectPtr<UPrimaryDataAsset> WeaponDataAsset = nullptr;
 
-	/** What type of damage this weapon deals (Ballistic/Energy/etc). */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shooter|Weapon|Tags")
-	FGameplayTag DamageTypeTag;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shooter|Weapon|Tags")
+    FGameplayTag WeaponClassTag;
 
-	/** Replicated fire mode (Semi/Burst/Auto). */
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon|Tags")
-	FGameplayTag CurrentFireModeTag;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shooter|Weapon|Tags")
+    FGameplayTag DamageTypeTag;
 
-	/** Replicated “busy” bit used by CanPerformAction. */
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Shooter|Weapon|State")
-	bool bIsReloading = false;
+    // Replicated state
+    UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon|Tags")
+    FGameplayTag CurrentFireModeTag;
 
-public:
-
-	void SetShooterPawn(USKGShooterPawnComponent* InPawn)
-	{
-		ShooterPawn = InPawn;
-	}
-
-	FORCEINLINE USKGShooterPawnComponent* GetShooterPawn() const
-	{
-		return ShooterPawn;
-	}
+    UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Shooter|Weapon|State")
+    bool bIsReloading = false;
 };

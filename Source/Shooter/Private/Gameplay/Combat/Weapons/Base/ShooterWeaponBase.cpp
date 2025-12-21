@@ -42,6 +42,12 @@ void AShooterWeaponBase::BeginPlay()
 void AShooterWeaponBase::HandleFire_Internal() {}
 void AShooterWeaponBase::HandleStopFire_Internal() {}
 
+void AShooterWeaponBase::FireWithProjectileSpec(const FProjectileConfig& Config, const FProjectileIdentity& Identity)
+{
+    // Default: if a weapon does not support projectile specs, fall back to normal firing.
+    Fire();
+}
+
 void AShooterWeaponBase::Fire()
 {
     if (HasAuthority())

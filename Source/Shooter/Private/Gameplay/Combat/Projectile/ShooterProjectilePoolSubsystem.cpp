@@ -1,8 +1,6 @@
 #include "Gameplay/Combat/Projectile/ShooterProjectilePoolSubsystem.h"
-
 #include "Gameplay/Combat/Projectile/ShooterProjectile.h"
 #include "Engine/World.h"
-#include "GameFramework/Actor.h"
 
 UShooterProjectilePoolSubsystem::UShooterProjectilePoolSubsystem()
 {
@@ -16,34 +14,46 @@ void UShooterProjectilePoolSubsystem::Deinitialize()
     Super::Deinitialize();
 }
 
-AShooterProjectile* UShooterProjectilePoolSubsystem::SpawnProjectile(const FProjectileSpawnParams& Params)
+AShooterProjectile* UShooterProjectilePoolSubsystem::SpawnProjectile(
+    TSubclassOf<AActor> ProjectileClass,
+    const FVector& SpawnLocation,
+    const FVector& ShootDirection,
+    const FProjectileConfig& Config,
+    const FProjectileIdentity& Identity,
+    AActor* InstigatorActor,
+    AController* InstigatorController)
 {
-    UWorld* World = GetWorld();
-    if (!World)
+    if (!GetWorld() || !ProjectileClass)
     {
         return nullptr;
     }
 
-    if (World->GetNetMode() == NM_Client)
+    AShooterProjectile* Projectile = AcquireFromPool(ProjectileClass); // Your existing pool acquire
+    if (!Projectile)
     {
-        // Server only; clients receive replicated projectiles.
-        return nullptr;
+        // Fallback spawn if pool is empty (still valid)
+        FActorSpawnParameters Params;
+        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        Params.Owner = InstigatorActor;
+        Params.Instigator = Cast<APawn>(InstigatorActor);
+
+        Projectile = GetWorld()->SpawnActor<AShooterProjectile>(ProjectileClass, SpawnLocation, ShootDirection.Rotation(), Params);
     }
 
-    AShooterProjectile* Projectile = AcquireOrCreateProjectile(Params.Config);
     if (!Projectile)
     {
         return nullptr;
     }
 
-    Projectile->OnPooledActivate(
-        Params.SpawnLocation,
-        Params.Direction,
-        Params.InstigatorController,
-        Params.InstigatorActor
+    Projectile->InitializeFromSpec(
+        SpawnLocation,
+        ShootDirection,
+        Config,
+        Identity,
+        InstigatorActor,
+        InstigatorController,
+        this
     );
-
-    ActiveProjectiles.Add(Projectile);
 
     return Projectile;
 }
@@ -73,13 +83,6 @@ AShooterProjectile* UShooterProjectilePoolSubsystem::AcquireOrCreateProjectile(c
             FRotator::ZeroRotator,
             SpawnParams
         );
-
-        if (!Projectile)
-        {
-            return nullptr;
-        }
-
-        Projectile->InitializeFromConfig(Config);
     }
 
     if (!Projectile)
@@ -87,10 +90,8 @@ AShooterProjectile* UShooterProjectilePoolSubsystem::AcquireOrCreateProjectile(c
         return nullptr;
     }
 
-    if (!Projectile->IsActive())
-    {
-        Projectile->InitializeFromConfig(Config);
-    }
+    Projectile->InitializeFromConfig(Config);
+    Projectile->SetOwningPool(this);
 
     return Projectile;
 }

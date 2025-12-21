@@ -2,12 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "ProjectileConfig.h"
+#include "Gameplay/Combat/Projectile/ProjectileConfig.h"
+#include "Gameplay/Combat/Projectile/ProjectileIdentity.h"
 #include "ShooterProjectile.generated.h"
 
 class USphereComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class UShooterProjectilePoolSubsystem;
 
 UCLASS()
 class SHOOTER_API AShooterProjectile : public AActor
@@ -18,29 +20,51 @@ public:
     AShooterProjectile();
 
     virtual void Tick(float DeltaSeconds) override;
-
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    // Called by pool subsystem to initialize before activation
-    void InitializeFromConfig(const FProjectileConfig& InConfig);
-
+    void InitializeFromSpec(
+        const FVector& SpawnLocation,
+        const FVector& ShootDirection,
+        const FProjectileConfig& InConfig,
+        const FProjectileIdentity& InIdentity,
+        AActor* InInstigatorActor,
+        AController* InInstigatorController,
+        class UShooterProjectilePoolSubsystem* InOwningPool);
+    
     // Pool API
     void OnPooledActivate(const FVector& SpawnLocation, const FVector& Direction, AController* InstigatorController, AActor* InstigatorActor);
     void OnPooledDeactivate();
 
     bool IsActive() const { return bIsActive; }
 
+    void SetOwningPool(UShooterProjectilePoolSubsystem* InPool) { OwningPool = InPool; }
+
 protected:
     virtual void BeginPlay() override;
 
-    UFUNCTION()
-    void OnProjectileHit(const FHitResult& Hit);
-
+    void HandleProjectileHit(const FHitResult& Hit);
     void ApplyDamage(const FHitResult& Hit);
     void SpawnImpactFX(const FHitResult& Hit);
     void UpdateTracerFX();
 
-protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
+    FProjectileConfig Config;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
+    FProjectileIdentity Identity;
+
+    UPROPERTY()
+    TWeakObjectPtr<AActor> InstigatorActorWeak;
+
+    UPROPERTY()
+    TWeakObjectPtr<AController> InstigatorControllerWeak;
+
+    UPROPERTY()
+    TObjectPtr<UShooterProjectilePoolSubsystem> OwningPool;
+
+    int32 RemainingRicochets = 0;
+    int32 RemainingPierces = 0;
+    
     UPROPERTY(VisibleAnywhere, Category = "Components")
     USphereComponent* CollisionComponent;
 
@@ -58,10 +82,4 @@ protected:
 
     UPROPERTY(Replicated)
     bool bIsActive;
-
-    // Not replicated; config should be identical across clients
-    FProjectileConfig Config;
-
-    TWeakObjectPtr<AController> InstigatorControllerWeak;
-    TWeakObjectPtr<AActor> InstigatorActorWeak;
 };
