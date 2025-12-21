@@ -27,7 +27,7 @@ struct FProjectileConfig
     int32 ProjectileCount = 1;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Pattern")
-    float SpreadConeHalfAngleDeg = 0.0f;
+    float SpreadHalfAngleDeg = 0.0f;
 
     // Ricochet / Pierce
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Modifier")

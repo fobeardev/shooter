@@ -32,8 +32,10 @@ public:
 
 protected:
     AShooterProjectile* AcquireOrCreateProjectile(const FProjectileConfig& Config);
+    
+    UPROPERTY(EditDefaultsOnly, Category="Projectile")
+    TSubclassOf<AShooterProjectile> DefaultProjectileClass;
 
-protected:
     UPROPERTY()
     TArray<TObjectPtr<AShooterProjectile>> InactiveProjectiles;
 

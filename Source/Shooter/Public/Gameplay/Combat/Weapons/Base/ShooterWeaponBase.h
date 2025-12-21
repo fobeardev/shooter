@@ -29,6 +29,18 @@ public:
     // Constructor
     AShooterWeaponBase();
 
+    UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
+    virtual void FireWithProjectileSpec(
+        const FProjectileConfig& Config,
+        const FProjectileIdentity& Identity
+    );
+
+    UFUNCTION(Server, Reliable)
+    void Server_FireWithProjectileSpec(
+        const FProjectileConfig& Config,
+        const FProjectileIdentity& Identity
+    );
+
     // --- Core virtuals for children ---
     UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
     virtual void Fire();
@@ -73,9 +85,6 @@ protected:
     // Internal handlers
     virtual void HandleFire_Internal();        // default: no-op
     virtual void HandleStopFire_Internal();    // default: no-op
-
-    UFUNCTION(BlueprintCallable, Category = "Shooter|Weapon")
-    virtual void FireWithProjectileSpec(const FProjectileConfig& Config, const FProjectileIdentity& Identity);
 
     // Components
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon")

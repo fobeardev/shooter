@@ -28,7 +28,11 @@ public:
 
     virtual void Fire() override;
     virtual void FireWithProjectileSpec(const FProjectileConfig& Config, const FProjectileIdentity& Identity) override;
-    virtual void Server_Fire_Implementation() override;
+    virtual void Server_FireWithProjectileSpec_Implementation(
+        const FProjectileConfig& Config,
+        const FProjectileIdentity& Identity
+    ) override;
+
     virtual void StopFire() override;
     
     virtual bool CanPerformAction() const override;
@@ -84,9 +88,6 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "Firearm|Projectile")
     FProjectileIdentity BaseProjectileIdentity;
 
-    UFUNCTION(Server, Reliable)
-    void Server_FireWithProjectileSpec(const FProjectileConfig& Config, const FProjectileIdentity& Identity);
-    
     virtual void HandleFire_Internal() override;
     virtual void HandleStopFire_Internal() override;
 

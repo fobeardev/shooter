@@ -141,50 +141,54 @@ void AShooterFirearm::Server_Fire_Implementation()
     BeginAutoIfNeeded();
 }
 
-void AShooterFirearm::Server_FireWithProjectileSpec_Implementation(const FProjectileConfig& Config, const FProjectileIdentity& Identity)
+
+void AShooterFirearm::Server_FireWithProjectileSpec_Implementation(
+    const FProjectileConfig& Config,
+    const FProjectileIdentity& Identity)
 {
     if (!GetWorld() || !FirearmComponent)
     {
         return;
     }
 
-    const FSKGMuzzleTransform MuzzleXform = FirearmComponent->GetMuzzleProjectileTransform(100.f, 1.f);
+    // Get muzzle transform from SKG (this keeps S_Muzzle correctness)
+    const FSKGMuzzleTransform MuzzleXform =
+        FirearmComponent->GetMuzzleProjectileTransform(100.f, 1.f);
+
     const FTransform Xf = MuzzleXform.ConvertToTransform();
-
     const FVector FireLoc = Xf.GetLocation();
-    const FVector ForwardDir = Xf.GetRotation().GetForwardVector();
+    const FVector FireDir = Xf.GetRotation().GetForwardVector();
 
-    UShooterProjectilePoolSubsystem* Pool = GetWorld()->GetSubsystem<UShooterProjectilePoolSubsystem>();
+    UShooterProjectilePoolSubsystem* Pool =
+        GetWorld()->GetSubsystem<UShooterProjectilePoolSubsystem>();
+
     if (!Pool)
     {
         return;
     }
 
-    const int32 Count = FMath::Max(1, Config.ProjectileCount);
-    const float ConeHalfAngleRad = FMath::DegreesToRadians(FMath::Max(0.0f, Config.SpreadConeHalfAngleDeg));
+    // Server spawns authoritative projectile using pool’s internal class selection
+    Pool->SpawnProjectile(
+        FireLoc,
+        FireDir,
+        Config,
+        Identity,
+        GetOwner(),
+        GetInstigatorController()
+    );
 
-    for (int32 i = 0; i < Count; ++i)
+    // bookkeeping + FX (server-safe; clients can still do predicted cosmetics separately)
+    if (FirearmComponent)
     {
-        FVector ShotDir = ForwardDir;
-
-        if (ConeHalfAngleRad > 0.0f)
-        {
-            ShotDir = UKismetMathLibrary::RandomUnitVectorInConeInDegrees(ForwardDir, Config.SpreadConeHalfAngleDeg);
-            ShotDir.Normalize();
-        }
-
-        Pool->SpawnProjectile(
-            ProjectileClass,
-            FireLoc,
-            ShotDir,
-            Config,
-            Identity,
-            GetOwner(),
-            GetInstigatorController()
-        );
+        FirearmComponent->ShotPerformed();
     }
 
-    FirearmComponent->ShotPerformed();
+    PlayFireEffects();
+
+    if (ShooterPawn)
+    {
+        ShooterPawn->PerformProceduralRecoil(FRotator(1.f), FVector(1.f), FRotator(1.f));
+    }
 }
 
 // Private methods
@@ -267,8 +271,10 @@ void AShooterFirearm::ClearFireTimers()
     GetWorldTimerManager().ClearTimer(AutoTimerHandle);
     PendingBurstShots = 0;
 }
-
-void AShooterFirearm::LaunchProjectile(const FSKGMuzzleTransform& LaunchTransform, const FProjectileConfig& Config, bool bIsLocalFire)
+void AShooterFirearm::LaunchProjectile(
+    const FSKGMuzzleTransform& LaunchTransform,
+    const FProjectileConfig& Config,
+    bool bIsLocalFire)
 {
     UWorld* World = GetWorld();
     if (!World)
@@ -276,10 +282,13 @@ void AShooterFirearm::LaunchProjectile(const FSKGMuzzleTransform& LaunchTransfor
         return;
     }
 
-    const FTransform Xf = LaunchTransform.ConvertToTransform();
-    const FVector FireLoc = Xf.GetLocation();
-    const FVector FireDir = Xf.GetRotation().GetForwardVector();
+    const FTransform MuzzleXf = LaunchTransform.ConvertToTransform();
+    const FVector FireLocation = MuzzleXf.GetLocation();
+    const FVector FireDirection = MuzzleXf.GetRotation().GetForwardVector();
 
+    // ----------------------------------------
+    // CLIENT: cosmetic only
+    // ----------------------------------------
     if (World->GetNetMode() == NM_Client)
     {
         if (bIsLocalFire)
@@ -289,37 +298,45 @@ void AShooterFirearm::LaunchProjectile(const FSKGMuzzleTransform& LaunchTransfor
         return;
     }
 
-    UShooterProjectilePoolSubsystem* PoolSubsystem = World->GetSubsystem<UShooterProjectilePoolSubsystem>();
-    if (!PoolSubsystem)
+    // ----------------------------------------
+    // SERVER: authoritative projectile spawn
+    // ----------------------------------------
+    UShooterProjectilePoolSubsystem* Pool =
+        World->GetSubsystem<UShooterProjectilePoolSubsystem>();
+
+    if (!Pool)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[ShooterFirearm] Missing ProjectilePoolSubsystem on %s"), *GetNameSafe(this));
+        UE_LOG(LogTemp, Warning,
+            TEXT("[ShooterFirearm] ProjectilePoolSubsystem missing on %s"),
+            *GetNameSafe(this));
         return;
     }
 
-    FProjectileSpawnParams SpawnParams;
-    SpawnParams.Config = Config;
-    SpawnParams.SpawnLocation = FireLoc;
-    SpawnParams.Direction = FireDir;
-    SpawnParams.InstigatorController = GetInstigatorController();
-    SpawnParams.InstigatorActor = this;
-
-    const int32 Count = FMath::Max(1, Config.ProjectileCount);
+    const int32 ProjectileCount = FMath::Max(1, Config.ProjectileCount);
     const float HalfAngleDeg = FMath::Max(0.0f, Config.SpreadHalfAngleDeg);
+    const float HalfAngleRad = FMath::DegreesToRadians(HalfAngleDeg);
 
-    if (Count == 1 || HalfAngleDeg <= 0.0f)
+    for (int32 i = 0; i < ProjectileCount; ++i)
     {
-        PoolSubsystem->SpawnProjectile(SpawnParams);
-    }
-    else
-    {
-        const float HalfAngleRad = FMath::DegreesToRadians(HalfAngleDeg);
+        const FVector ShotDir =
+            (ProjectileCount > 1 && HalfAngleRad > 0.0f)
+                ? FMath::VRandCone(FireDirection, HalfAngleRad)
+                : FireDirection;
 
-        for (int32 i = 0; i < Count; ++i)
-        {
-            SpawnParams.Direction = FMath::VRandCone(FireDir, HalfAngleRad);
-            PoolSubsystem->SpawnProjectile(SpawnParams);
-        }
+        Pool->SpawnProjectile(
+            FireLocation,
+            ShotDir,
+            Config,
+            /*Identity*/ FProjectileIdentity::MakeWeaponIdentity(this),
+            /*InstigatorActor*/ GetOwner(),
+            /*InstigatorController*/ GetInstigatorController()
+        );
     }
+
+    // ----------------------------------------
+    // Server-side weapon bookkeeping
+    // ----------------------------------------
+    FirearmComponent->ShotPerformed();
 
     if (bIsLocalFire)
     {

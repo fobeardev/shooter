@@ -15,31 +15,19 @@ void UShooterProjectilePoolSubsystem::Deinitialize()
 }
 
 AShooterProjectile* UShooterProjectilePoolSubsystem::SpawnProjectile(
-    TSubclassOf<AActor> ProjectileClass,
     const FVector& SpawnLocation,
-    const FVector& ShootDirection,
+    const FVector& Direction,
     const FProjectileConfig& Config,
     const FProjectileIdentity& Identity,
     AActor* InstigatorActor,
     AController* InstigatorController)
 {
-    if (!GetWorld() || !ProjectileClass)
+    if (!GetWorld() || !DefaultProjectileClass)
     {
         return nullptr;
     }
 
-    AShooterProjectile* Projectile = AcquireFromPool(ProjectileClass); // Your existing pool acquire
-    if (!Projectile)
-    {
-        // Fallback spawn if pool is empty (still valid)
-        FActorSpawnParameters Params;
-        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-        Params.Owner = InstigatorActor;
-        Params.Instigator = Cast<APawn>(InstigatorActor);
-
-        Projectile = GetWorld()->SpawnActor<AShooterProjectile>(ProjectileClass, SpawnLocation, ShootDirection.Rotation(), Params);
-    }
-
+    AShooterProjectile* Projectile = GetOrCreateProjectile(DefaultProjectileClass);
     if (!Projectile)
     {
         return nullptr;
@@ -47,7 +35,7 @@ AShooterProjectile* UShooterProjectilePoolSubsystem::SpawnProjectile(
 
     Projectile->InitializeFromSpec(
         SpawnLocation,
-        ShootDirection,
+        Direction,
         Config,
         Identity,
         InstigatorActor,

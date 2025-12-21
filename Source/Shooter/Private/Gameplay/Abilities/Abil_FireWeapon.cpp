@@ -115,7 +115,7 @@ void UAbil_FireWeapon::ActivateAbility(
         {
             // Bullet-hell friendly
             Config.ProjectileCount = FMath::Max(Config.ProjectileCount, 3);
-            Config.SpreadConeHalfAngleDeg = FMath::Max(Config.SpreadConeHalfAngleDeg, 4.5f);
+            Config.SpreadHalfAngleDeg = FMath::Max(Config.SpreadHalfAngleDeg, 4.5f);
 
             Identity.Pattern = ShooterTags::Projectile_Pattern_Spread;
             Identity.Modifiers.AddTag(ShooterTags::Projectile_Modifier_Accelerate); // optional synergy; remove if you dislike

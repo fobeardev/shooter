@@ -42,10 +42,25 @@ void AShooterWeaponBase::BeginPlay()
 void AShooterWeaponBase::HandleFire_Internal() {}
 void AShooterWeaponBase::HandleStopFire_Internal() {}
 
-void AShooterWeaponBase::FireWithProjectileSpec(const FProjectileConfig& Config, const FProjectileIdentity& Identity)
+void AShooterWeaponBase::FireWithProjectileSpec(
+    const FProjectileConfig& Config,
+    const FProjectileIdentity& Identity)
 {
-    // Default: if a weapon does not support projectile specs, fall back to normal firing.
-    Fire();
+    if (HasAuthority())
+    {
+        Server_FireWithProjectileSpec_Implementation(Config, Identity);
+    }
+    else
+    {
+        Server_FireWithProjectileSpec(Config, Identity);
+    }
+}
+
+void AShooterWeaponBase::Server_FireWithProjectileSpec_Implementation(
+    const FProjectileConfig& Config,
+    const FProjectileIdentity& Identity)
+{
+    // Base does nothing; child (firearm) implements actual firing.
 }
 
 void AShooterWeaponBase::Fire()
